@@ -83,3 +83,209 @@ HTTP Transport Flow
 3.	Client sends JSON-RPC requests via POST to message endpoint
 4.	Server sends responses and notifications via SSE stream
 
+Core Primitives
+Tools
+Tools are executable functions that servers expose to clients. They enable the LLM to perform actions like querying databases, calling APIs, manipulating files, or executing code. Tools are model-controlled, meaning the AI decides when and how to invoke them based on context.
+Tool Definition Schema
+Each tool is defined with a name, description, and JSON Schema for its input parameters:
+{
+  "name": "query_database",
+  "description": "Execute a SQL query against the connected database",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "query": { "type": "string", "description": "SQL query to execute" },
+      "params": { "type": "array", "description": "Query parameters" }
+    },
+    "required": ["query"]
+  }
+}
+Tool Response Format
+Tool results are returned as an array of content items, supporting multiple types:
+{
+  "content": [
+    { "type": "text", "text": "Query returned 42 rows" },
+    { "type": "image", "data": "base64...", "mimeType": "image/png" },
+    { "type": "resource", "resource": { "uri": "file:///results.csv", "text": "..." } }
+  ],
+  "isError": false
+}
+
+Resources
+Resources represent contextual data that servers expose to clients. Unlike tools (which perform actions), resources provide read-only access to data like files, database records, API responses, or live system information. Resources are application-controlled, meaning the host decides how to incorporate them into the LLM context.
+Resource URI Schemes
+-	file:// - Local filesystem resources (file:///home/user/document.txt)
+-	http:// / https:// - Web resources and API endpoints
+-	Custom schemes - Server-specific resources (db://table/id, git://repo/branch)
+-	Templates - Dynamic URIs with parameters (file:///{path}, db://users/{id})
+Resource Content Types
+// Text resource
+{ "uri": "file:///config.json", "mimeType": "application/json", "text": "{...}" }
+
+// Binary resource (base64 encoded)
+{ "uri": "file:///image.png", "mimeType": "image/png", "blob": "iVBORw0KGgo..." }
+
+Prompts
+Prompts are reusable templates that servers expose for common workflows. They allow servers to define structured interactions with optional arguments, enabling consistent and well-crafted prompts for specific use cases. Prompts are user-controlled, typically selected explicitly by users through UI elements.
+Prompt Definition
+{
+  "name": "code_review",
+  "description": "Review code for best practices and potential issues",
+  "arguments": [
+    { "name": "language", "description": "Programming language", "required": true },
+    { "name": "focus", "description": "Review focus area", "required": false }
+  ]
+}
+Prompt Response (GetPromptResult)
+{
+  "description": "Code review for Python",
+  "messages": [
+    { "role": "user", "content": { "type": "text", "text": "Review this Python code..." } },
+    { "role": "user", "content": { "type": "resource", "resource": { "uri": "file://code.py" } } }
+  ]
+}
+
+Sampling (Server-Initiated LLM Requests)
+Sampling allows servers to request LLM completions through the client. This enables agentic behaviors where servers can leverage AI capabilities for tasks like content analysis, decision making, or generating responses within their workflows. This is a powerful feature that requires explicit client capability support.
+Sampling Request
+{
+  "method": "sampling/createMessage",
+  "params": {
+    "messages": [{ "role": "user", "content": { "type": "text", "text": "Analyze..." } }],
+    "maxTokens": 1000,
+    "systemPrompt": "You are a code analyzer...",
+    "modelPreferences": { "hints": [{ "name": "claude-3-sonnet" }] }
+  }
+}
+
+Server Architecture Overview
+An MCP server is responsible for exposing capabilities (tools, resources, prompts) to clients. Servers can be implemented in any language, but official SDKs are provided for Python and TypeScript. The server handles incoming requests, manages state, and returns appropriate responses.
+
+Python Server Implementation Example
+Project Setup
+# Create project directory
+mkdir my-mcp-server && cd my-mcp-server
+
+# Initialize with uv (recommended) or pip
+uv init
+uv add mcp
+
+# Or with pip
+pip install mcp
+Basic Server Structure
+# server.py
+import asyncio
+from mcp.server import Server
+from mcp.server.stdio import stdio_server
+from mcp.types import Tool, TextContent, Resource, Prompt
+
+# Create server instance
+server = Server("my-server")
+
+# Define tool handler
+@server.list_tools()
+async def list_tools() -> list[Tool]:
+    return [
+        Tool(
+            name="get_weather",
+            description="Get current weather for a city",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "city": {"type": "string", "description": "City name"}
+                },
+                "required": ["city"]
+            }
+        )
+    ]
+
+@server.call_tool()
+async def call_tool(name: str, arguments: dict) -> list[TextContent]:
+    if name == "get_weather":
+        city = arguments.get("city", "Unknown")
+        # Implement actual weather API call here
+        return [TextContent(type="text", text=f"Weather in {city}: 72°F, Sunny")]
+    raise ValueError(f"Unknown tool: {name}")
+
+# Main entry point
+async def main():
+    async with stdio_server() as (read_stream, write_stream):
+        await server.run(read_stream, write_stream, server.create_initialization_options())
+
+if __name__ == "__main__":
+    asyncio.run(main())
+Adding Resources
+@server.list_resources()
+async def list_resources() -> list[Resource]:
+    return [
+        Resource(
+            uri="config://app/settings",
+            name="Application Settings",
+            description="Current application configuration",
+            mimeType="application/json"
+        )
+    ]
+
+@server.read_resource()
+async def read_resource(uri: str) -> str:
+    if uri == "config://app/settings":
+        return json.dumps({"theme": "dark", "language": "en"})
+    raise ValueError(f"Unknown resource: {uri}")
+Adding Prompts
+@server.list_prompts()
+async def list_prompts() -> list[Prompt]:
+    return [
+        Prompt(
+            name="summarize",
+            description="Summarize content with specified length",
+            arguments=[
+                {"name": "content", "description": "Content to summarize", "required": True},
+                {"name": "length", "description": "Summary length (short/medium/long)", "required": False}
+            ]
+        )
+    ]
+
+@server.get_prompt()
+async def get_prompt(name: str, arguments: dict) -> dict:
+    if name == "summarize":
+        length = arguments.get("length", "medium")
+        content = arguments.get("content", "")
+        return {
+            "messages": [{
+                "role": "user",
+                "content": {"type": "text", "text": f"Summarize ({length}): {content}"}
+            }]
+        }
+    raise ValueError(f"Unknown prompt: {name}")
+
+
+
+Security Model Overview
+MCP implements a layered security model with multiple defense mechanisms. Security is a shared responsibility between hosts, clients, and servers. The protocol is designed with the principle of least privilege, requiring explicit capability negotiation and user consent for sensitive operations.
+Security Principles
+-	User Consent: Hosts must obtain explicit user approval before exposing data to servers or allowing tool execution
+-	Data Minimization: Servers should request only the minimum data necessary; hosts should expose only required information
+-	Capability Isolation: Each server operates independently with its own capabilities; no cross-server access without explicit configuration
+-	Transport Security: Use TLS for HTTP transport; stdio provides process-level isolation for local servers
+-	Input Validation: All inputs must be validated and sanitized; never trust data from any source without verification
+
+Server Design Best Practices
+-	Single Responsibility: Each server should focus on one domain (e.g., filesystem, database, API). Avoid creating monolithic servers.
+-	Clear Tool Descriptions: Write detailed, unambiguous descriptions for tools. The LLM uses these to decide when and how to use them.
+-	Idempotent Operations: Design tools to be idempotent where possible. The same call with the same arguments should produce the same result.
+-	Error Handling: Return meaningful error messages. Use isError flag appropriately. Never expose internal stack traces.
+-	Graceful Degradation: Handle missing optional features gracefully. Check client capabilities before using advanced features.
+-	Logging: Implement structured logging for debugging. Use stderr for logs (never stdout in stdio transport).
+
+Client Design Best Practices
+-	Connection Management: Implement robust connection lifecycle management. Handle reconnection gracefully.
+-	Timeout Handling: Set appropriate timeouts for all operations. Long-running tools should support progress notifications.
+-	Capability Caching: Cache server capabilities after initialization. Refresh only when notified of changes.
+-	Multi-Server Support: Design clients to manage multiple server connections simultaneously with proper isolation.
+
+Tool Schema Design
+-	Use JSON Schema Validation: Define strict input schemas with proper types, constraints, and required fields.
+-	Provide Defaults: Use sensible defaults for optional parameters to improve usability.
+-	Document Enums: When using enums, list all valid values in the description.
+-	Limit Complexity: Avoid deeply nested schemas. Break complex operations into multiple simpler tools.
+
