@@ -1,0 +1,85 @@
+
+Introduction to MCP
+
+The Model Context Protocol (MCP) is an open standard developed by Anthropic that enables seamless, secure, and standardized communication between AI applications (hosts/clients) and external data sources or tools (servers). It provides a universal interface layer that allows Large Language Models to interact with the outside world in a controlled, well-defined manner.
+MCP follows a client-server architecture where the host application (such as Claude Desktop, an IDE, or a custom AI application) connects to one or more MCP servers that expose capabilities like tools, resources, and prompts. This architecture enables modular, extensible AI systems where capabilities can be added or removed without modifying the core application.
+
+
+Core Design Principles
+-	Standardization: A unified protocol for AI-tool communication, eliminating the need for custom integrations
+-	Security-First: Built-in security model with capability negotiation and user consent requirements
+-	Extensibility: Modular architecture allowing servers to expose any combination of tools, resources, and prompts
+-	Interoperability: Language-agnostic specification with official SDKs for Python and TypeScript
+-	Simplicity: JSON-RPC 2.0 foundation for familiar, well-understood communication patterns
+
+Terminology:
+
+Host:	The application that initiates MCP connections (e.g., Claude Desktop, IDE plugins). Hosts create and manage client instances.
+Client:	The protocol endpoint within the host that maintains a 1:1 connection with an MCP server. Sends requests and receives responses.
+Server:	An external process or service that exposes capabilities (tools, resources, prompts) to clients via MCP.
+Tool:	An executable function exposed by a server that the LLM can invoke to perform actions (e.g., database queries, API calls).
+Resource:	Contextual data exposed by a server that the client can read (e.g., files, database records, API responses).
+Prompt:	Reusable prompt templates exposed by a server that can accept arguments and generate structured messages.
+Transport:	The communication layer (- or HTTP/SSE) over which JSON-RPC messages are exchanged.
+
+
+Protocol Layer Architecture
+MCP is built on a layered architecture that separates concerns and enables flexibility in implementation:
+-	Application Layer: The host application (LLM based, IDE) and business logic
+-	Protocol Layer: MCP message types, capability negotiation, and lifecycle management
+-	Message Layer: JSON-RPC 2.0 encoding for requests, responses, and notifications
+-	Transport Layer: - (local processes) or HTTP with Server-Sent Events (remote servers)
+
+Message Format (JSON-RPC 2.0)
+All MCP communication uses JSON-RPC 2.0 messages. There are three message types:
+Request Message
+{
+  "jsonrpc": "2.0",
+  "id": "unique-request-id",
+  "method": "tools/call",
+  "params": { "name": "get_weather", "arguments": { "city": "NYC" } }
+}
+Response Message
+{
+  "jsonrpc": "2.0",
+  "id": "unique-request-id",
+  "result": { "content": [{ "type": "text", "text": "72°F, Sunny" }] }
+}
+Notification Message
+{
+  "jsonrpc": "2.0",
+  "method": "notifications/resources/updated",
+  "params": { "uri": "file:///data/config.json" }
+}
+
+Connection Lifecycle
+Every MCP connection follows a defined lifecycle with specific phases:
+1.	Initialization: Client sends 'initialize' request with protocol version and capabilities
+2.	Server Response: Server responds with its capabilities and protocol version
+3.	Initialized Notification: Client sends 'notifications/initialized' to confirm ready state
+4.	Operation Phase: Normal message exchange (tool calls, resource reads, etc.)
+5.	Shutdown: Either party can close the connection gracefully
+
+Note: During initialization, both client and server declare their supported capabilities. This allows for graceful degradation and feature detection. Capabilities include support for tools, resources, prompts, logging, sampling, and experimental features.
+
+Transport Mechanisms
+
+Stdio Transport
+The stdio (standard input/output) transport is the primary mechanism for local MCP servers. The host spawns the server as a subprocess and communicates via stdin/stdout streams. This transport is simple, secure (no network exposure), and ideal for local tools and file system access.
+-	Host spawns server process with specified command and arguments
+-	JSON-RPC messages sent via stdin (client→server) and stdout (server-client)
+-	Messages are newline-delimited JSON (one complete JSON object per line)
+-	stderr is reserved for logging and debug output (not protocol messages)
+
+HTTP with Server-Sent Events (SSE)
+For remote servers or scenarios requiring network access, MCP supports HTTP transport with Server-Sent Events for server-to-client streaming. This enables cloud-hosted MCP servers and cross-network communication.
+HTTP/SSE Architecture
+•	Client-Server: HTTP POST requests to the server's message endpoint
+•	Server-Client: Server-Sent Events (SSE) stream for responses and notifications
+•	Endpoint Discovery: Client connects to SSE endpoint, receives message endpoint URI
+HTTP Transport Flow
+1.	Client establishes SSE connection to server (e.g., GET /sse)
+2.	Server sends 'endpoint' event with message POST URI
+3.	Client sends JSON-RPC requests via POST to message endpoint
+4.	Server sends responses and notifications via SSE stream
+
