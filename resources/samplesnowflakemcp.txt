@@ -1,6 +1,6 @@
 Introduction
 
-This document outlines the technical design for a Model Context Protocol (MCP) server that provides secure, governed access to Snowflake data warehouse capabilities within our banking environment. The MCP Snowflake Server enables AI assistants and agentic workflows to execute SQL queries, retrieve schema information, and interact with banking data while maintaining strict compliance with regulatory requirements including SOX, GLBA, PCI-DSS, and internal data governance policies.
+This document outlines the technical design for a Model Context Protocol (MCP) server that provides secure, governed access to Snowflake data warehouse capabilities within our banking environment. The Snowflake Managed  MCP Server enables AI assistants and agentic workflows to execute SQL queries, retrieve schema information, and interact with banking data while maintaining strict compliance with regulatory requirements including SOX, GLBA, PCI-DSS, and internal data governance policies.
 The solution implements a defense-in-depth security model with multiple layers of authentication, authorization, query validation, and audit logging. All database interactions are mediated through the MCP server, which enforces role-based access control (RBAC), implements query allow-lists and deny-lists, and provides comprehensive audit trails for regulatory compliance.
 Key capabilities include: secure query execution with parameterized queries to prevent SQL injection, schema exploration tools for AI assistants to understand data structures, result set handling with automatic PII detection and masking, and integration with the bank's existing identity and access management (IAM) infrastructure.
 
@@ -9,6 +9,7 @@ Model Context Protocol Overview
 The Model Context Protocol (MCP) is an open standard developed by Anthropic that enables secure, standardized communication between AI applications and external data sources or tools. MCP follows a client-server architecture where MCP clients (typically AI assistants or agentic frameworks) connect to MCP servers that expose specific capabilities through a well-defined interface.
 MCP servers expose three primary primitive types: Tools (executable functions that perform actions), Resources (data sources that can be read), and Prompts (templated instructions for common workflows). This design document focuses on implementing an MCP server that exposes Snowflake capabilities through these primitives while maintaining banking-grade security controls.
 
+Snowflake provides a fully managed MCP server that lets AI agents securely retrieve data from Snowflake accounts without needing to deploy separate infrastructure. The managed server supports Cortex Analyst, Cortex Search, Cortex Agents, SQL execution, and custom tools (UDFs/stored procedures) through a standardized MCP interface with OAuth 2.0 authentication and role-based access control.
 
 The banking industry is increasingly adopting AI-powered solutions for data analysis, risk assessment, fraud detection, and customer service enhancement. However, direct AI access to production databases presents significant security and compliance risks. The MCP Snowflake Server addresses these challenges by providing a controlled gateway that enables AI capabilities while enforcing appropriate guardrails.
 Primary business drivers include:
@@ -18,14 +19,22 @@ Primary business drivers include:
 -	Reduce risk of data breaches through centralized access control and query validation
 -	Support regulatory compliance requirements for AI governance
 
+The combination of MCP standardization with Snowflake Cortex AI capabilities enables powerful use cases:
+-	Self-service analytics: Business users can query complex data using natural language through Cortex Analyst
+-	Document intelligence: RAG-powered search over compliance documents, policies, and regulatory filings via Cortex Search
+-	Automated agents: Cortex Agents that combine structured data queries with unstructured document search for comprehensive analysis
+-	Governance compliance: All AI operations remain within Snowflake's governance boundary with full audit trails
+
 
 In Scope:
--	Read-only query execution against approved Snowflake databases and schemas
+-	Read-only SQL query execution against approved Snowflake databases
+-	Cortex Analyst integration with semantic views for text-to-SQL
+-	Cortex Search integration for RAG over banking documents
+-	Cortex Agent orchestration for multi-step analytical workflows
+-	Custom tool integration via UDFs and stored procedures
 -	Schema introspection and metadata retrieval
--	Integration with enterprise SSO and service account authentication
--	Query result caching and rate limiting
+-	Integration with enterprise SSO via OAuth 2.0
 -	PII detection and dynamic data masking
--	Comprehensive audit logging and monitoring integration
 Out of Scope (Current phase - can change):
 -	Write operations (INSERT, UPDATE, DELETE)
 -	DDL operations (CREATE, ALTER, DROP)
@@ -70,6 +79,7 @@ Service Account Authentication
 Automated workflows and AI agents authenticate using X.509 certificates issued by the bank's internal PKI. Mutual TLS (mTLS) ensures both client and server authentication. Service account certificates include custom extensions that encode the service identity, authorized operations, and data access permissions. Certificates have short validity periods (30 days) and require automated rotation.
 
 Snowflake Authentication
+The Snowflake-managed MCP server uses OAuth 2.0 authentication aligned with the MCP protocol's authorization specification. A security integration must be created with OAUTH_CLIENT_TYPE = 'CONFIDENTIAL'. Dynamic client registration is not supported; clients must be pre-registered. Programmatic Access Tokens (PATs) are supported but should use least-privileged roles.
 The MCP server authenticates to Snowflake using key-pair authentication with RSA keys. Private keys are stored in the secrets management system and loaded into memory only when needed. The server uses a dedicated Snowflake service account with minimal privileges (USAGE on specific warehouses and SELECT on approved schemas). Key rotation occurs every 90 days through automated processes.
 
 Authorization
@@ -114,6 +124,21 @@ The MCP server exposes the following tools for Snowflake interaction. Each tool 
 3.	validate_query: Validates a SQL query without executing it. Performs syntax validation via SQL parser, authorization check against user's entitlements, complexity analysis and limit validation, and identification of tables/columns referenced. Returns validation status and any issues found. Allows AI assistants to check queries before execution.
 4.	get_query_history: Retrieves the user's recent query history from the current session. Returns executed queries with execution time, row counts, and status. Useful for AI assistants to understand context of previous operations.
 5.	explain_query: Returns the execution plan for a query without running it. Provides estimated cost, join strategy, and partitions scanned. Helps AI assistants optimize query performance before execution.
+6.	cortex_analyst_query: Executes a natural language query against a semantic view using Cortex Analyst's text-to-SQL engine. Accepts parameters for the user message (natural language question), semantic view identifier (fully qualified name), and optional conversation history for multi-turn context. Returns the generated SQL statement, a natural language explanation of the query logic, and the query results with column metadata. Requires SELECT privilege on the target semantic view. Useful for enabling business users to query complex banking data without SQL knowledge.
+7.	cortex_search_query: Performs hybrid vector and keyword search over a Cortex Search Service for RAG applications. Accepts parameters for the search query (natural language text), columns to return (array of column names), filter object (JSON filter criteria on attributes), and limit (maximum results, default 10). Returns ranked search results with relevance scores, matched text chunks, and associated metadata columns. Requires USAGE privilege on the Cortex Search Service. Useful for searching compliance documents, policies, regulatory filings, and unstructured banking records.
+8.	cortex_agent_run: Invokes a Cortex Agent for multi-step reasoning and tool orchestration. Accepts parameters for the user message (task description or question) and optional session context for stateful interactions. Returns the agent's response including any intermediate tool invocations, generated SQL queries, search results, and final synthesized answer. Requires USAGE privilege on the Cortex Agent. Useful for complex analytical workflows that combine structured data queries with document search and custom business logic.
+9.	invoke_custom_function: Executes a user-defined function (UDF) or stored procedure exposed as a GENERIC tool type. Accepts parameters defined by the function's input schema (varies per function), warehouse identifier for compute, and function type (function or procedure). Returns the function output in the declared return type (scalar, VARIANT/JSON, or ARRAY). Requires USAGE privilege on the UDF or stored procedure. Useful for invoking banking-specific calculations such as risk scoring, fraud detection models, or regulatory reporting functions.
+10.	cortex_complete: Invokes Cortex LLM functions for text generation tasks. Accepts parameters for the prompt (text input), model selection (e.g., mistral-large, llama3-70b), max_tokens (output length limit), and temperature (creativity control 0-1). Returns the generated text completion. Useful for summarization, sentiment analysis, translation, and free-form text generation on banking data within query results.
+11.	cortex_summarize: Generates a concise summary of input text using Cortex's SUMMARIZE function. Accepts parameters for the source text (document content or query results) and optional summary length preference (short, medium, long). Returns a condensed summary preserving key information. Useful for summarizing lengthy compliance documents, customer communications, or aggregated report data for executive consumption.
+12. cortex_sentiment: Analyzes sentiment of text content using Cortex's SENTIMENT function. Accepts parameters for the input text (customer feedback, communications, or document excerpts). Returns a sentiment score (-1 to 1 scale) and categorical classification (positive, negative, neutral). Useful for analyzing customer complaint sentiment, monitoring social media mentions, or flagging negative communications for escalation.
+
+Cortex AI Specific Tool types:
+- CORTEX_SEARCH_SERVICE_QUERY: Cortex Search Service tool
+- CORTEX_ANALYST_MESSAGE: Cortex Analyst tool
+- SYSTEM_EXECUTE_SQL: SQL execution
+- CORTEX_AGENT_RUN: Cortex Agent tool
+- GENERIC: tool for UDFs and stored procedures
+
 
 MCP Resources
 Resources provide read-only access to data that AI assistants can reference. Unlike tools, resources are designed for data that changes infrequently and can be cached.
@@ -165,6 +190,12 @@ Several strategies optimize query performance and reduce Snowflake compute costs
 -	Schema Caching: Database and schema metadata is cached with longer TTL since it changes infrequently. Cache invalidation occurs on schema change notifications or manual refresh.
 -	Warehouse Routing: Queries are routed to appropriately-sized warehouses based on estimated complexity. Simple metadata queries use smaller warehouses; complex analytical queries can request larger resources.
 -	Query Queuing: When concurrent query limits are reached, requests are queued with fair scheduling based on user priority tiers.
+
+Sample Use cases (Cortex specific):
+1.	Transaction Analytics: "What was our total transaction volume by region last quarter?"
+2.	Risk Analysis: "Show me the top 10 accounts by overdraft frequency this month"
+3.	Customer Insights: "What is our customer acquisition cost trend over the past year?"
+4.	Compliance Reporting: "Generate a summary of suspicious activity reports by category"
 
 
 
