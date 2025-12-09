@@ -1,0 +1,141 @@
+
+
+Procedure Lookup and GuidanceScenario: A branch operations specialist needs to process an international wire transfer for a high-net-worth client but is unfamiliar with the enhanced due diligence requirements for transfers exceeding $100,000.MCP Tools Used:
+
+cortex_search_query — Searches the bank's operational procedures repository for wire transfer protocols
+cortex_summarize — Condenses the 15-page wire transfer SOP into actionable steps
+cortex_analyst_query — Retrieves the client's transaction history to verify account standing
+Sample Interaction:
+
+"What are the approval requirements and documentation needed for international wire transfers over $100,000 to non-FATF countries?"
+Value: Reduces average handle time from 25 minutes to 4 minutes by eliminating manual document searches and providing contextually relevant procedure excerpts.
+
+New Employee Onboarding Support
+Scenario: A newly hired loan processor needs to understand the end-to-end mortgage origination workflow, including system access requirements, approval hierarchies, and compliance checkpoints.
+MCP Tools Used:
+
+cortex_search_query — Retrieves relevant sections from the Mortgage Operations Manual
+cortex_agent_run — Orchestrates a multi-step response combining process documentation with current system access requirements from HR tables
+get_schema — Helps the employee understand the loan origination database structure they'll be working with
+
+Sample Interaction:
+
+"Walk me through the complete mortgage application process from initial submission to closing, including which systems I need access to and who approves at each stage."
+
+Value: Accelerates new hire productivity from 6 weeks to 3 weeks by providing on-demand, conversational access to institutional knowledge.
+
+
+Exception Handling Guidance
+Scenario: A teller encounters an unusual situation where a customer wants to deposit a third-party check exceeding the standard hold limits, and the customer is disputing the extended hold period.
+MCP Tools Used:
+
+cortex_search_query — Searches exception handling procedures and Regulation CC hold policies
+cortex_analyst_query — Queries customer relationship data to determine if hold exceptions are warranted based on account history
+execute_query — Retrieves the customer's deposit history and overdraft frequency
+
+Sample Interaction:
+
+"What are the criteria for granting a hold exception on third-party checks, and does this customer qualify based on their account history?"
+
+Value: Empowers frontline staff to make compliant decisions without escalating to supervisors, reducing customer wait times by 60%.
+
+Compliance Procedure Verification
+Scenario: An operations manager needs to verify that the current BSA/AML transaction monitoring procedures align with the latest FinCEN guidance before an upcoming regulatory examination.
+MCP Tools Used:
+
+cortex_search_query — Searches internal BSA procedures and external FinCEN advisory documents
+cortex_agent_run — Compares internal procedures against regulatory requirements and identifies gaps
+cortex_analyst_query — Pulls current SAR filing statistics and alert disposition metrics
+
+Sample Interaction:
+
+"Compare our current CTR filing procedures against the latest FinCEN requirements and identify any gaps or areas needing updates."
+
+Value: Reduces examination preparation time by 70% and proactively identifies compliance gaps before regulatory review.
+
+Process Change Impact Analysis
+Scenario: The bank is implementing a new core banking system and needs to identify all operational procedures that reference the legacy system, including screen names, field mappings, and workflow steps.
+MCP Tools Used:
+
+cortex_search_query — Searches all procedure documents for references to the legacy system
+cortex_summarize — Summarizes impacted procedures by department and criticality
+execute_query — Retrieves document metadata including last update dates and document owners
+
+Sample Interaction:
+
+"Find all operational procedures that reference the Legacy CorePlus system and categorize them by department, with a summary of what needs to be updated for the migration."
+
+Value: Reduces process documentation audit from 3 weeks of manual review to 2 days of automated discovery.
+
+Real-Time Procedure Clarification
+Scenario: A fraud analyst is reviewing a suspicious ACH transaction and needs to confirm the correct escalation path for potential elder financial exploitation cases.
+MCP Tools Used:
+
+cortex_search_query — Retrieves elder abuse reporting procedures and escalation matrices
+cortex_analyst_query — Queries the customer's profile for age and account activity patterns
+cortex_sentiment — Analyzes recent customer service notes for indicators of distress or confusion
+
+Sample Interaction:
+
+"What is the escalation procedure for suspected elder financial exploitation, and what external reporting obligations do we have?"
+
+Value: Ensures consistent, compliant handling of sensitive situations with immediate access to correct procedures and reporting requirements.
+
+ Cross-Departmental Process Coordination
+Scenario: A commercial loan officer needs to understand the documentation handoff process between Commercial Lending, Credit Risk, Legal, and Loan Operations for a complex syndicated loan.
+MCP Tools Used:
+
+cortex_search_query — Searches process documentation across multiple departmental repositories
+cortex_agent_run — Synthesizes information from multiple sources into a unified workflow view
+get_query_history — Retrieves previous queries on this topic to maintain context
+
+Sample Interaction:
+
+"Map the complete document flow and approval chain for syndicated commercial loans over $10M, including responsibilities for each department and SLA timelines."
+
+Value: Eliminates process ambiguity that typically causes 2-3 day delays in complex loan closings.
+
+Audit Trail and Process Evidence
+Scenario: Internal audit is reviewing wire transfer procedures and needs to demonstrate that operations staff have access to current, version-controlled procedure documentation.
+MCP Tools Used:
+
+cortex_search_query — Retrieves procedure documents with version metadata
+execute_query — Pulls document access logs showing staff engagement with procedures
+cortex_analyst_query — Generates statistics on procedure document views by role and department
+
+Sample Interaction:
+
+"Generate a report showing wire transfer procedure documents, their last revision dates, approval signatures, and access statistics by operations staff over the past 90 days."
+
+Value: Provides auditors with immediate evidence of procedure governance and staff awareness.
+
+Disaster Recovery Procedure Access
+Scenario: A regional outage has occurred, and the business continuity team needs immediate access to the disaster recovery runbook for the payment processing systems.
+MCP Tools Used:
+
+cortex_search_query — Rapidly retrieves DR procedures for specific systems
+cortex_summarize — Provides executive summary of critical first-hour actions
+cortex_analyst_query — Queries system dependency data to identify downstream impacts
+
+Sample Interaction:
+
+"Retrieve the disaster recovery procedures for the ACH processing system, prioritized by RTO criticality, and identify all dependent downstream systems."
+
+Value: Reduces DR procedure retrieval from 15 minutes of manual searching to 30 seconds during critical incidents.
+
+
+Procedure Gap Identification
+Scenario: Following a near-miss operational incident, the risk team needs to determine if existing procedures adequately cover the scenario that almost caused a loss.
+MCP Tools Used:
+
+cortex_search_query — Searches for procedures related to the incident type
+cortex_agent_run — Analyzes the incident details against existing procedures and identifies coverage gaps
+cortex_complete — Drafts recommended procedure additions based on the gap analysis
+
+Sample Interaction:
+
+"We had a near-miss where a duplicate payment was almost released due to a system timeout. Search our procedures for duplicate payment detection and identify if there are gaps in handling system timeout scenarios."
+
+Value: Transforms reactive incident response into proactive procedure improvement with AI-assisted gap analysis.
+
+
