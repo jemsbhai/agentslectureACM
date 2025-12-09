@@ -139,3 +139,147 @@ Sample Interaction:
 Value: Transforms reactive incident response into proactive procedure improvement with AI-assisted gap analysis.
 
 
+Suspicious Activity Investigation and SAR PreparationScenario: A BSA analyst receives an alert for unusual wire activity on a commercial account—multiple same-day international wires to high-risk jurisdictions just below the $10,000 reporting threshold. The analyst needs to investigate the activity pattern, gather supporting evidence, and determine if a SAR filing is warranted.MCP Tools Used:
+
+cortex_analyst_query — Queries transaction history, identifies structuring patterns, and calculates velocity metrics
+cortex_search_query — Retrieves FinCEN guidance on structuring indicators and relevant typologies
+cortex_agent_run — Orchestrates a comprehensive investigation pulling customer profile, transaction data, prior alerts, and beneficial ownership information
+cortex_summarize — Generates a narrative summary of suspicious activity for the SAR filing
+execute_query — Retrieves linked accounts and related party transactions
+Sample Interaction:
+
+"Analyze account 4472891 for potential structuring activity over the past 90 days. Show me all wire transfers to high-risk countries, identify any patterns that fall just below reporting thresholds, retrieve the beneficial ownership structure, and compare this activity against FinCEN structuring typologies."
+Value: Reduces SAR investigation time from 4 hours to 45 minutes while improving narrative quality and evidentiary completeness. Ensures consistent application of suspicious activity indicators across all analysts.
+
+
+Regulatory Change Impact Assessment 
+Scenario: The OCC has issued new guidance on third-party risk management that takes effect in 90 days. The compliance team needs to assess the bank's current state, identify gaps against the new requirements, and develop a remediation roadmap.
+MCP Tools Used:
+
+cortex_search_query — Searches the new OCC guidance and existing bank policies on vendor management
+cortex_agent_run — Compares current policies against new requirements and identifies specific gaps
+cortex_analyst_query — Queries the vendor management database to inventory current third-party relationships by risk tier
+cortex_complete — Drafts remediation action items and policy update recommendations
+cortex_summarize — Creates executive briefing on compliance gaps and resource requirements
+Sample Interaction:
+
+"Compare our current Third-Party Risk Management Policy against the new OCC Guidance 2024-15. Identify specific gaps, map them to affected vendor relationships, and draft a remediation plan with estimated effort for each gap."
+Value: Reduces regulatory change assessment from 3 weeks to 3 days. Ensures no requirements are missed and provides auditable documentation of the gap analysis methodology.
+
+Real-Time KYC/CDD Refresh
+Scenario: A relationship manager is preparing for an annual review meeting with a high-value commercial client. The bank's policy requires a Customer Due Diligence refresh, including verification that beneficial ownership information is current and screening against updated sanctions lists.
+MCP Tools Used:
+
+cortex_analyst_query — Retrieves current CDD profile, last refresh date, and identifies stale data elements
+cortex_search_query — Searches recent adverse media mentions and regulatory actions against the company and its principals
+invoke_custom_function — Calls the OFAC screening UDF against current beneficial owners
+cortex_agent_run — Orchestrates a comprehensive refresh pulling corporate registry data, news, and transaction patterns
+cortex_sentiment — Analyzes news articles for negative sentiment indicators
+
+Sample Interaction:
+
+"Prepare a CDD refresh package for Meridian Holdings LLC (CIF 88291). Identify any beneficial ownership changes since last review, screen all current owners against OFAC and PEP lists, summarize any adverse media from the past 12 months, and flag any transaction patterns inconsistent with their stated business purpose."
+
+Value: Reduces CDD refresh preparation from 2 hours to 15 minutes. Ensures consistent application of enhanced due diligence triggers and provides relationship managers with comprehensive client intelligence.
+
+Credit Risk Concentration Monitoring
+Scenario: The Chief Credit Officer needs a real-time view of credit concentrations across the commercial loan portfolio, including industry sectors, geographic regions, and single-name exposures, with alerts for any limits approaching policy thresholds.
+MCP Tools Used:
+
+cortex_analyst_query — Queries loan portfolio data with aggregations by NAICS code, state, collateral type, and borrower groups
+execute_query — Retrieves policy concentration limits from the risk appetite framework
+invoke_custom_function — Calculates Herfindahl-Hirschman Index for portfolio diversification
+cortex_agent_run — Compares current concentrations against limits and identifies emerging concerns
+cortex_summarize — Generates executive dashboard narrative highlighting key risks
+
+Sample Interaction:
+
+"Generate a credit concentration report showing our top 10 industry exposures, geographic distribution, and largest single-name exposures. Flag any concentrations within 10% of policy limits, identify quarter-over-quarter trends, and highlight any sectors with deteriorating credit quality metrics."
+
+Value: Enables daily concentration monitoring rather than monthly static reports. Provides early warning of emerging concentration risks before limit breaches occur.
+
+Privacy and Data Subject Rights Compliance
+Scenario: The bank receives a CCPA data subject access request from a California customer requesting all personal information held about them, the sources of that data, and any third parties with whom their data has been shared.
+MCP Tools Used:
+
+cortex_agent_run — Orchestrates data discovery across multiple systems to locate all customer PII
+cortex_analyst_query — Queries data lineage tables to identify data sources and downstream recipients
+cortex_search_query — Retrieves the bank's CCPA response procedures and required disclosure formats
+cortex_summarize — Generates customer-friendly summary of data held and its uses
+execute_query — Pulls vendor data sharing logs for third-party disclosures
+
+Sample Interaction:
+
+"Process DSAR request #2024-1847 for customer John Smith (CIF 991827). Identify all systems containing this customer's personal information, compile data sources for each element, list any third-party data sharing in the past 24 months, and generate the required CCPA disclosure response."
+
+Value: Reduces DSAR response time from 5 days to 4 hours. Ensures complete and accurate response while maintaining compliance with the 45-day regulatory deadline.
+
+Regulatory Reporting Reconciliation and Validation
+Scenario: The regulatory reporting team needs to validate the Call Report data before submission, reconciling reported figures against general ledger balances, identifying any significant variances, and ensuring consistency with prior period submissions.
+MCP Tools Used:
+
+cortex_analyst_query — Queries GL balances, loan system totals, and deposit system totals for reconciliation
+invoke_custom_function — Executes variance analysis algorithms comparing reported vs. source figures
+cortex_search_query — Retrieves Call Report instructions for specific line items with reconciliation differences
+execute_query — Pulls prior period reported amounts for trend analysis
+cortex_agent_run — Performs comprehensive validation including cross-schedule consistency checks and quarter-over-quarter variance explanations
+
+Sample Interaction:
+
+"Validate the Q4 Call Report before submission. Reconcile Schedule RC-C loan totals against the loan system, identify any variances exceeding $100K, check cross-schedule consistency between RC and RI, flag any line items with unusual quarter-over-quarter changes, and verify mathematical accuracy of all calculated fields."
+
+Value: Reduces regulatory reporting validation from 3 days to 4 hours. Significantly decreases resubmission rates and regulatory inquiry frequency.
+
+System Integration Troubleshooting
+
+Scenario: A critical interface between the core banking system and the wire transfer platform is failing intermittently during peak hours. The middleware support team needs to quickly understand the integration architecture, identify all components in the data flow, and pinpoint potential failure points.
+
+MCP Tools Used:
+
+cortex_search_query — Searches integration architecture documentation, interface specifications, and data flow diagrams
+cortex_analyst_query — Queries system monitoring data for error rates, latency metrics, and throughput patterns during failure windows
+cortex_agent_run — Correlates infrastructure metrics with application logs to identify bottlenecks
+execute_query — Retrieves message queue depths, connection pool utilization, and thread counts from observability tables
+cortex_summarize — Generates incident summary with probable root cause and affected downstream systems
+
+Sample Interaction:
+
+"The FedWire interface is timing out during peak hours. Show me the complete data flow from core banking through the middleware layer to FedLine Advantage, identify all queue and connection pool configurations, retrieve error patterns from the last 5 failure windows, and correlate with CPU/memory metrics on the middleware servers."
+
+Value: Reduces mean time to identify (MTTI) from 3 hours to 25 minutes by providing instant access to architecture documentation alongside real-time system metrics.
+
+Disaster Recovery Runbook Access and Validation
+
+Scenario: During a tabletop DR exercise, the business continuity team realizes the payment processing DR runbook hasn't been validated against recent infrastructure changes. They need to verify the runbook accuracy and identify any gaps.
+
+MCP Tools Used:
+
+cortex_search_query — Retrieves current DR runbooks, recovery procedures, and RTO/RPO requirements
+cortex_analyst_query — Queries the CMDB for current infrastructure configuration and compares against runbook assumptions
+cortex_agent_run — Validates runbook steps against current system architecture and identifies discrepancies
+execute_query — Retrieves last DR test results and any documented exceptions
+cortex_complete — Drafts updated runbook sections and identifies required procedure changes
+
+Sample Interaction:
+
+"Validate the ACH Processing disaster recovery runbook against current infrastructure. Compare the documented server names, IP addresses, and failover sequences against the current CMDB. Identify any infrastructure changes since the last runbook update, flag steps that reference decommissioned systems, and highlight any new dependencies not covered in the current procedures."
+
+Value: Ensures DR procedures remain accurate and executable. Reduces DR validation effort from 1 week to 1 day while improving recovery confidence.
+
+Legacy System Knowledge Preservation
+
+Scenario: The bank is planning to retire a 25-year-old COBOL-based general ledger system. Key personnel with system knowledge are retiring, and the team needs to capture institutional knowledge about system behavior, undocumented business rules, and integration quirks.
+
+MCP Tools Used:
+
+cortex_search_query — Searches existing documentation, incident tickets, and change records for system knowledge
+cortex_analyst_query — Queries transaction logs to identify usage patterns, batch job schedules, and data flows
+cortex_agent_run — Synthesizes information from multiple sources to build comprehensive system documentation
+cortex_complete — Generates structured documentation from unstructured knowledge sources
+cortex_summarize — Creates executive summaries of critical system functions and dependencies
+
+Sample Interaction:
+
+"Build a knowledge base for the Legacy GL system (GLMF400) before retirement. Extract all documented and undocumented interfaces from integration logs, identify batch job dependencies and timing constraints from scheduler data, compile all incident tickets mentioning workarounds or special handling, and interview notes from the system SMEs. Generate structured documentation covering data flows, business rules, and known issues."
+
+Value: Preserves critical institutional knowledge that would otherwise be lost. Reduces legacy system migration risk by ensuring complete understanding of current-state behavior.
