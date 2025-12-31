@@ -1,0 +1,635 @@
+Guardrails for Model Context Protocol (MCP) Servers
+
+Creation, Deployment, and Configuration Guidance for Enterprise Banking
+
+
+Version: 1.0
+Date: 31 December 2025
+Status: Draft / Reference
+ 
+Document Control
+Field	Value	Field	Value
+Document Title	Guardrails for Model Context Protocol (MCP) Servers in Enterprise Banking	Owner	Enterprise AI Platform Team
+Intended Audience	Security, Platform Engineering, Data Engineering, IAM, Compliance, and Connector Developers	Review Cadence	Quarterly or upon material change
+Applies To	All MCP servers and MCP-capable clients/hosts used to access enterprise systems	Environments	Dev / Test / UAT / Prod
+Confidentiality	Internal - for engineering and security teams	Dependencies	MCP specification, enterprise IAM, data governance
+Change Log	v1.0 - Initial draft	Related Docs	Model governance, SDLC, data classification standard, incident response
+
+Table of Contents
+Right-click and choose 'Update Field' to populate the table of contents.
+ 
+1. Purpose and Scope
+This document defines a generic, enterprise-grade guardrail framework for building and operating Model Context Protocol (MCP) servers used in the banking industry. It is intended to be a practical reference for engineers implementing custom MCP servers (for example, Snowflake, Confluence, ServiceNow, and similar systems) and for security teams defining control requirements.
+The guidance is vendor-neutral and focuses on defense-in-depth: controls are applied at the MCP client/host layer, at the MCP server layer, at the infrastructure layer, and in the downstream target systems themselves.
+
+1.1 In Scope
+•	Guardrails for MCP servers and MCP-enabled clients/hosts in enterprise environments.
+•	Control objectives and recommended baseline configurations for enterprise banking workloads.
+•	Patterns for identity-aware access, least privilege, data minimization, and auditability.
+•	Server-specific guardrail templates, including Snowflake (data/SQL), Confluence (knowledge/content), and ServiceNow (ITSM/workflows).
+•	Testing, operational monitoring, incident response hooks, and change management for MCP integrations.
+1.2 Out of Scope
+•	Selection of a specific LLM provider or model deployment architecture.
+•	Model training, fine-tuning, or evaluation methodology (covered by model risk management / MRM).
+•	Business policy decisions (for example, which use cases are approved); this document provides technical implementation guidance once those decisions are made.
+1.3 Audience
+•	Platform Engineering: designs and runs shared MCP infrastructure and templates.
+•	Connector Developers: implement MCP server tools, resources, and prompts.
+•	Security Engineering / IAM: defines identity, authorization, secrets, and monitoring requirements.
+•	Data Governance & Compliance: defines classification rules and controls for sensitive banking data.
+1.4 Definitions and Terminology
+Key terms used throughout the document:
+•	MCP Host: The application that manages one or more MCP clients and coordinates security, consent, and context aggregation.
+•	MCP Client: A client instance that connects to an MCP server and exchanges JSON-RPC messages.
+•	MCP Server: A process/service that exposes capabilities to clients, including Tools, Resources, and Prompts.
+•	Tool: An executable function exposed by a server that the model can call (for example, query_data, create_ticket).
+•	Resource: A readable item exposed by a server (for example, a document, a dataset excerpt, a configuration record).
+•	Prompt: A reusable prompt template or workflow exposed by a server.
+•	Guardrail: A technical control that reduces risk by restricting, validating, monitoring, or approving MCP-driven actions or data flows.
+•	Downstream system: The target system behind the server (for example, Snowflake, Confluence, ServiceNow).
+ 
+2. MCP Primer for Enterprise Implementers
+MCP standardizes how AI applications connect to external tools and data sources. It is designed around a client-host-server architecture and uses JSON-RPC 2.0 message patterns for requests, responses, and notifications. MCP is commonly used to expose enterprise systems as composable, discoverable capabilities that AI assistants can invoke in a structured way.
+
+2.1 Core Interaction Model
+•	Discovery: clients request a list of available tools/resources/prompts, including descriptions and input schemas.
+•	Invocation: the model (via the host) selects a tool and calls it with structured arguments.
+•	Result return: the server returns structured outputs that the host may pass to the model, render to the user, or both.
+•	Session lifecycle: initialization includes capability negotiation and protocol version agreement; operations occur in a normal message exchange phase; shutdown is graceful.
+2.2 Transports and Deployment Implications
+MCP supports multiple transports. The transport choice is a major security and operational design decision:
+•	Stdio transport (local): server runs as a local process and communicates through standard input/output streams. This reduces network exposure but creates a strong trust boundary issue: the server typically runs with the same machine/user privileges as the host process.
+•	Streamable HTTP transport (remote): server runs as an independent process reachable over HTTP. The spec allows a single endpoint that supports POST and GET; servers can optionally use Server-Sent Events (SSE) to stream server messages and notifications. This transport enables shared enterprise services and centralized controls, but requires robust authentication, authorization, and network security.
+2.3 MCP Features Relevant to Guardrails
+•	Server features: Tools (actions), Resources (data/context), Prompts (templates/workflows).
+•	Client features: Sampling (server-initiated nested LLM calls), Roots (filesystem boundaries exposed to servers), Elicitation (server requests for additional user input).
+•	Utilities: cancellation, progress reporting, tasks (durable state machines for long-running work), logging and error reporting.
+2.4 Why Guardrails Matter More in Banking
+Banking systems contain highly sensitive information (customer PII, account details, transaction history, internal risk models) and enable high-impact actions (payments, account changes, access provisioning). MCP connects AI-driven workflows to these systems, increasing the blast radius of traditional integration risks and introducing new risks such as prompt injection, tool misuse, and unintended data disclosure. The goal of guardrails is to enable controlled automation while preserving confidentiality, integrity, availability, and regulatory compliance.
+ 
+3. Guardrail Objectives and Threat Model
+3.1 Control Objectives for Banking Use Cases
+Guardrails should be designed to meet the following control objectives. These objectives are written generically and can be mapped to your bank’s internal control framework (for example, NIST/ISO controls, SOC, PCI DSS, or local regulatory guidance).
+•	Confidentiality: prevent unauthorized disclosure of customer data, proprietary models, internal controls, and secrets.
+•	Integrity: prevent unauthorized changes to data and systems; ensure only intended, policy-compliant actions occur.
+•	Availability: protect key systems (data warehouses, ITSM platforms) from abuse, excessive load, or runaway automation.
+•	Accountability and auditability: produce an immutable record of what the AI system requested, what was executed, under which identity, and what data was returned.
+•	Privacy and data minimization: ensure the model receives only the minimum data required for the task; apply masking and redaction where needed.
+•	Regulatory compliance: support evidence collection, retention, and access controls aligned with relevant regulations and internal policies.
+3.2 What Makes MCP a High-Leverage Attack Surface
+MCP sits between the AI host and enterprise systems. As a result, it becomes an attractive control plane for attackers and a critical control point for defenders.
+•	Tool invocation translates model output into real system actions (reads, writes, administrative operations).
+•	Resources and tool results can inject untrusted content into the model context, creating prompt injection risks.
+•	If an MCP server runs locally, it can inherit the host’s machine/user privileges.
+•	If an MCP server runs remotely, it becomes a network-exposed service that must be hardened like any other production API.
+•	Newer protocol features (for example, sampling) may enable server-initiated behaviors that amplify risk if not constrained.
+3.3 Common Threat Scenarios
+Use the scenarios below to drive your threat model, testing strategy, and control selection:
+•	Prompt injection in user input: user attempts to coerce the assistant to call a privileged tool or exfiltrate data.
+•	Second-order prompt injection: retrieved content (for example, a Confluence page or ServiceNow ticket description) includes hidden or adversarial instructions that the model treats as directives.
+•	Excessive permissions: server uses an over-privileged service account; model can access more than intended.
+•	Unauthorized writes: model triggers changes (for example, modifying records, closing tickets, altering Snowflake objects) without approvals or validation.
+•	Data leakage via context: tool returns PII, secrets, keys, or internal-only data that is then included in the model’s response or logs.
+•	Lateral movement: compromised server or supply chain attack uses the MCP connection to reach internal systems.
+•	Denial of service / cost blow-up: repeated expensive queries or large exports overwhelm downstream systems or create unplanned cost.
+•	Transport abuse: insecure HTTP endpoints, token replay, missing mTLS, insufficient rate limiting.
+•	Sampling abuse: malicious or buggy servers use nested sampling to obtain additional model outputs or to trigger tool use unexpectedly.
+3.4 Guardrail Design Principles
+•	Least privilege by default: prefer read-only access and smallest possible blast radius; expand with explicit approvals.
+•	Fail closed: if identity, policy, or validation signals are missing or ambiguous, deny the request.
+•	Treat all retrieved content as untrusted: never let untrusted content directly drive tool selection or parameters.
+•	Separate duties: separate tool execution from tool approval for high-risk actions (two-person rule where required).
+•	Deterministic tool interfaces: prefer narrow tools (purpose-built) over general tools ("execute arbitrary SQL"), especially for write operations.
+•	Defense in depth: implement enforcement at multiple layers; do not rely on prompts as the primary control.
+•	Observable by design: make actions auditable and explainable; ensure logs and metrics exist before production rollout.
+ 
+4. Reference Architecture for MCP Guardrails
+4.1 Defense-in-Depth Layers
+Implement guardrails across multiple layers. Each layer provides unique controls and compensating safeguards.
+•	Layer A - User and channel controls: authentication, role checks, session controls, and user intent capture.
+•	Layer B - MCP host / orchestrator controls: tool allowlisting, risk gating, human approvals, and context assembly rules.
+•	Layer C - MCP server controls: strong authentication, authorization enforcement, input validation, output filtering, and safe execution.
+•	Layer D - Infrastructure controls: network segmentation, secrets management, runtime sandboxing, rate limiting, and telemetry.
+•	Layer E - Downstream system controls: native RBAC/ABAC, row-level security, data masking, and change approval workflows.
+4.2 Suggested Enterprise Pattern
+A practical deployment pattern for banks is to centralize MCP server hosting while preserving strong identity boundaries and policy enforcement. The diagram below illustrates one generic approach.
+User / Analyst / Engineer
+        |
+        v
+AI Channel (chat, IDE, workflow UI)  --(user auth)-->  MCP Host / Orchestrator
+        |                                   |
+        |                                   +--> Policy Decision Point (PDP)
+        |                                        - tool risk tiers
+        |                                        - data classification rules
+        |                                        - user entitlements
+        |                                        - approvals / step-up auth
+        |
+        +-- (JSON-RPC via stdio or HTTP) --> MCP Server (per system / per domain)
+                                              |
+                                              +--> Downstream System API / DB
+                                                   - native RBAC / masking / RLS
+                                                   - audit logs / change mgmt
+
+
+4.3 Guardrail Placement Guidance
+Not all controls belong in the same place. Use the table below to place enforcement where it is most effective and reliable.
+Control Type	Best Enforcement Point	Why	Examples
+Authentication & session	Transport + MCP server	Must be enforced before any capability is exposed	OAuth 2.1 + PKCE, mTLS, token validation
+Authorization	MCP server + downstream system	Server knows tool semantics; downstream enforces data-level controls	RBAC/ABAC, scoped tokens, RLS/masking
+Risk gating & approvals	MCP host/orchestrator	Host sees user intent and can ask for confirmations	Human-in-the-loop for writes, two-person rule
+Input validation	MCP server	Closest to execution; can validate types and block unsafe patterns	SQL allowlist, argument schemas, field allowlists
+Output filtering / redaction	MCP server and/or host	Data minimization should happen before data reaches the model	PII redaction, truncation, aggregation
+Audit trail	All layers	Regulatory evidence requires end-to-end traceability	Correlation IDs, immutable logs, SIEM forwarding
+Rate limiting & quotas	API gateway + server	Protects both service and downstream systems	Per-user RPS, cost budgets, circuit breakers
+ 
+5. Guardrail Policy Framework
+5.1 Classify Tools by Action Risk
+Every tool exposed by an MCP server should be classified by its potential business and technical impact. The classification drives approval requirements, identity requirements, monitoring, and allowable parameters.
+Recommended action risk tiers:
+Tier	Action Type	Examples	Default Access	Additional Guardrails
+Tier 0	Read-only, low sensitivity	Read public/internal docs; metadata lookups	Allowed for authenticated users	Rate limits; basic logging
+Tier 1	Read-only, sensitive	Read customer-related records; financial reports; risk data	Allowed only with entitlements	Data masking/redaction; row-level controls; stricter logging
+Tier 2	Write, low impact	Create/modify non-critical tickets; add comments	Allowed with explicit confirmation	Idempotency keys; field allowlists; approval for bulk changes
+Tier 3	Write, high impact	Close incidents; update production configs; change access	Not allowed by default	Human approval; step-up auth; dual control; change ticket linkage
+Tier 4	Privileged / admin	DDL, permission grants, account provisioning	Prohibited unless exception-approved	Dedicated break-glass workflow; limited time window; full recording and review
+
+5.2 Classify Data Returned to the Model
+Guardrails must consider not only what tools can do, but also what data can be returned to the model as context. Define a data classification model compatible with your bank’s data governance standard.
+•	Public: safe for external sharing (rare in banking tool contexts).
+•	Internal: non-public operational information; still requires access control.
+•	Confidential: customer data, non-public financial information, internal security details.
+•	Restricted: secrets, credentials, cryptographic material, regulated data sets, or any data explicitly prohibited from being shared with an external model.
+At minimum, implement a "context release policy" that determines which classifications may be sent to which models or environments (for example, internal LLM vs. third-party LLM).
+5.3 Policy as Code
+To keep guardrails consistent across many servers (Snowflake, Confluence, ServiceNow, etc.), implement policies as code and evaluate them at runtime. Policy evaluation should be deterministic and testable.
+A generic policy evaluation pipeline:
+1.	Parse the incoming request: tool name, arguments, user identity, and session context.
+2.	Resolve policy inputs: user entitlements, environment, data classification tags, and risk tier.
+3.	Evaluate deny rules first (fail closed).
+4.	Evaluate allow rules and compute any constraints (row limits, field allowlists, safe timeouts).
+5.	If the tool is high risk, require approval/step-up authentication before execution.
+6.	Execute with constrained downstream permissions and enforce output filtering.
+7.	Emit audit events and metrics.
+5.4 Example Policy Configuration (Generic YAML)
+The following example illustrates a minimal, generic configuration approach. Adapt the schema to your policy engine and deployment environment.
+mcpServer:
+  serverId: "snowflake-prod-ro"
+  environment: "prod"
+  transport: "streamable_http"
+  auth:
+    mode: "oauth2"
+    requiredScopes:
+      - "mcp:tools"
+  logging:
+    redact:
+      - "PAN"          # payment card number patterns
+      - "SSN"
+      - "API_KEY"
+    retentionDays: 365
+  tools:
+    - name: "snowflake.query"
+      description: "Run a read-only query against approved datasets."
+      riskTier: "Tier 1"
+      policy:
+        sqlMode: "select_only"
+        allowDatabases: ["FINANCE_DB", "RISK_DB"]
+        denySchemas: ["RAW_PII"]
+        maxRows: 1000
+        statementTimeoutSeconds: 30
+        requireQueryTag: true
+    - name: "servicenow.create_incident"
+      riskTier: "Tier 2"
+      policy:
+        allowTables: ["incident"]
+        allowFields: ["short_description", "description", "category", "urgency", "impact"]
+        requireExplicitUserConfirmation: true
+        denyIfContainsSecrets: true
+
+
+ 
+6. Guardrails by Layer
+6.1 MCP Host / Client Guardrails
+The host/client layer is the best place to implement user-facing controls (consent, approvals, and safe UX). In banking, many high-risk actions should never be executed without an explicit human decision at this layer.
+Baseline host/client controls:
+•	Tool allowlisting per workspace/use case: expose only the minimum set of servers and tools required.
+•	Risk-aware tool selection: route high-risk tool calls through an approval workflow instead of executing automatically.
+•	Explicit confirmation for Tier 2+ tools: show the exact action and parameters that will be executed.
+•	Context assembly guardrails: limit the amount and sensitivity of data included in model context; separate 'data' from 'instructions' when constructing prompts.
+•	Session controls: bind tool calls to an authenticated user session; enforce idle timeouts and re-authentication for privileged actions.
+•	Client-side sandboxing for local servers: run local MCP servers with minimal privileges and restrict filesystem/network access whenever possible.
+•	Safe defaults: disable or restrict newer capabilities (for example, sampling) unless a risk review is completed.
+
+Operational host/client controls (recommended):
+•	Per-user and per-team quotas to prevent runaway automation and cost spikes.
+•	Prompt injection defenses: flag suspicious instructions in retrieved content and require additional confirmation before executing actions derived from it.
+•	User-visible provenance: show which tool/resource produced each piece of context used in the model response.
+•	Client policy updates: distribute policy changes centrally and require policy version reporting in logs.
+6.2 MCP Server Guardrails
+MCP servers should be treated as production APIs. They must be secure-by-default, deterministic, and observable. Server-side guardrails are the last line of defense before an action reaches an enterprise system.
+Baseline server controls:
+•	Authentication: require strong authentication for any remote transport; avoid long-lived shared secrets.
+•	Authorization: enforce user- and tool-level authorization; do not rely solely on downstream system permissions.
+•	Schema validation: validate tool inputs against a strict schema; reject unknown fields; enforce type and range constraints.
+•	Safe execution: constrain commands/queries (for example, SELECT-only mode by default for data systems); enforce timeouts.
+•	Data minimization: return only necessary fields; cap row counts; avoid full exports.
+•	Output filtering: redact sensitive fields and secrets before data is returned to the host/model.
+•	Idempotency and replay protection for write tools: require idempotency keys and block duplicated requests.
+•	Rate limiting and circuit breakers: protect both the MCP server and downstream systems.
+•	Comprehensive logging: capture who did what, when, where, and why, including policy decisions and redactions.
+Recommended advanced server controls:
+•	Policy engine integration (PDP/OPA/Cedar) with signed policy bundles and version pinning.
+•	Parameterization and query builders instead of free-form commands (especially for SQL and admin operations).
+•	Content safety scanning for tool outputs that will be injected into model context (for example, scanning for secrets or malicious instructions).
+•	Per-tool concurrency limits (for example, limit concurrent export operations).
+•	Token binding and proof-of-possession where supported (reduces token replay).
+6.3 Infrastructure Guardrails
+Infrastructure guardrails reduce the impact of compromised components and provide hard security boundaries.
+•	Network segmentation: deploy MCP servers in a restricted network zone with controlled egress to downstream systems.
+•	Private connectivity: prefer private endpoints/private links to data systems; avoid public internet routes for internal systems.
+•	mTLS or service mesh for internal service-to-service authentication.
+•	API gateway/WAF in front of remote MCP endpoints (HTTP transport) for rate limiting and threat filtering.
+•	Secrets management: store credentials in a vault; rotate automatically; avoid embedding secrets in config files or container images.
+•	Container hardening: run as non-root; read-only filesystem where possible; minimal base images; vulnerability scanning.
+•	Supply chain controls: signed artifacts; dependency pinning; SBOM generation; regular patching.
+•	Separation of environments: strict isolation between dev/test/prod; no production data in lower environments unless explicitly approved.
+6.4 Downstream System Guardrails
+Do not treat the MCP layer as a substitute for native downstream controls. Use downstream systems’ security features as authoritative enforcement where feasible.
+•	Use native RBAC/ABAC: ensure the underlying system enforces permissions regardless of MCP behavior.
+•	Use data-level controls: row-level security, column masking, view-based access, and classification tags.
+•	Use change management workflows: for high-impact changes, require change tickets and approvals.
+•	Enable native auditing: collect logs from downstream systems and correlate them with MCP request IDs.
+•	Set resource controls: query timeouts, compute limits, rate limits, and export controls.
+ 
+7. Guardrail Creation Workflow for New MCP Servers
+7.1 Phase 0 - Intake and System Analysis
+Before writing code, perform an intake that captures the minimum security and governance context required to build a safe connector.
+8.	Identify the business use cases (what users need to accomplish) and map them to specific tool capabilities.
+9.	Identify data domains involved and their classifications (for example, customer PII, payment data, internal-only metrics).
+10.	Identify the downstream system’s native security model (RBAC, ACLs, row-level controls, audit logs).
+11.	Decide the transport model (local stdio vs remote HTTP) and where the server will run (developer workstation, bank-managed platform, third-party hosted).
+12.	Decide identity mode (user-delegated vs service account) and whether on-behalf-of access is required.
+13.	Document prohibited actions (for example, no bulk exports, no DDL, no credential retrieval).
+7.2 Phase 1 - Define the Tool Catalog (Least Privilege)
+Design the tool catalog as a constrained interface. Avoid general-purpose 'execute anything' tools whenever possible.
+•	Start with read-only tools; add write tools only after a risk review.
+•	Prefer narrow, purpose-built tools (for example, get_account_summary) over broad tools (execute_sql).
+•	For any write tool, define explicit field allowlists and enforce them server-side.
+•	Assign a risk tier to every tool and document required approvals and entitlements.
+•	Define maximum output size, row limits, and pagination behavior.
+•	Define deterministic error handling and user-facing error messages that do not leak sensitive details.
+7.3 Phase 2 - Implement Policy Enforcement and Validation
+Implement policy enforcement as close to execution as possible. Guardrails must not depend on the model following instructions.
+14.	Implement strict JSON schema validation for each tool’s input arguments.
+15.	Reject unknown fields and unexpected argument structures.
+16.	Normalize and canonicalize inputs before evaluation (for example, trim whitespace, enforce casing for identifiers).
+17.	Evaluate policy (allow/deny + constraints) using a deterministic policy engine.
+18.	For high-risk tools, require an explicit approval token generated by an out-of-band workflow (HITL).
+19.	Enforce data minimization and redaction on tool outputs before returning results.
+7.4 Phase 3 - Build Observability and Auditability
+Banks need evidence. Every server must be built with end-to-end traceability.
+•	Generate correlation IDs per request and propagate them to downstream systems (where supported).
+•	Log: user identity, client identity, tool name, parameters (redacted), policy decision, downstream request metadata, and response size.
+•	Emit security events for denied actions, policy violations, and suspected prompt injection indicators.
+•	Export logs/metrics to the enterprise observability stack (SIEM + APM).
+•	Define retention and access controls for logs (logs may contain sensitive data even after redaction).
+7.5 Phase 4 - Security Review and Go-Live Checklist
+Treat the first production deployment of a server as a security release.
+•	Threat model review completed and signed off by security.
+•	Least-privilege roles/permissions created in downstream systems.
+•	Data classification and context release rules implemented and tested.
+•	Rate limits, timeouts, and quotas configured for production.
+•	Incident response runbooks and on-call ownership defined.
+•	Penetration testing / red team tests completed for prompt injection and abuse scenarios.
+•	Change management and rollback plans validated.
+ 
+8. Identity, Authentication, and Authorization
+8.1 Identity Models
+There are two common identity models for MCP servers. Choose intentionally; the identity model determines what you can audit and what you can safely allow.
+•	User-delegated (recommended for most banking use cases): the MCP client presents a token representing the user, and the server enforces user-level permissions. Downstream calls are made either with the same token or with an on-behalf-of token.
+•	Service-account (limited use): the server uses a fixed service identity to access downstream systems. This model is simpler but weakens accountability and increases blast radius; it should be restricted to low-risk, read-only use cases and tightly constrained datasets.
+8.2 Remote Servers (HTTP Transport) - OAuth-Based Authorization
+For remote MCP servers, implement standards-based authorization. The MCP specification defines an OAuth-based framework for HTTP transport, including discovery mechanisms and metadata.
+•	Use OAuth 2.1 with PKCE for public clients and appropriate controls for confidential clients.
+•	Use short-lived access tokens and rotate refresh tokens according to enterprise policy.
+•	Use scopes that map to tool groups and risk tiers (for example, mcp:tools:read, mcp:tools:write:tier2).
+•	Validate token audience, issuer, expiry, and scopes on every request.
+•	Support dynamic client registration where feasible to reduce manual onboarding overhead.
+•	Enforce consent and conditional access (device posture, network location, MFA) using your identity provider.
+Recommended scope design principles:
+•	Scopes should represent capabilities, not backend implementation details (avoid 'snowflake:select').
+•	Use coarse scopes for discovery (list tools) and finer scopes for invocation (call tool).
+•	Use explicit 'write' scopes and separate admin scopes; do not overload read scopes.
+•	Use environment-specific audiences/scopes to prevent token confusion between dev/test/prod.
+8.3 Local Servers (Stdio Transport) - Privilege and Sandboxing
+Local servers can be appropriate for development and certain workstation-bound tools, but they can run with the same privileges as the host process. Treat local servers as potentially dangerous executables.
+•	Require explicit user approval before installing or launching local servers, and show the exact command that will be executed.
+•	Run local servers with minimal OS privileges (non-admin user) and restrict filesystem and network access when possible.
+•	Prefer stdio over local HTTP endpoints to reduce exposure to other local processes.
+•	If a local HTTP endpoint is used, require an authorization token and bind it to the local host (and ideally to a Unix domain socket).
+8.4 Authorization Enforcement Patterns
+Implement authorization as an explicit, testable layer in the MCP server. Avoid embedding authorization logic in tool handlers without a shared policy framework.
+•	Policy Decision Point (PDP): a centralized engine that evaluates allow/deny decisions based on identity, tool, parameters, and data tags.
+•	Policy Enforcement Point (PEP): the MCP server middleware that calls the PDP and enforces constraints.
+•	Downstream enforcement: ensure downstream systems enforce permissions even if the server is compromised.
+•	Break-glass workflow: dedicated, time-limited path for exceptional privileged actions with explicit approvals and extra logging.
+8.5 Token and Secret Handling
+•	Never return secrets to the model or to end users (API keys, passwords, private keys, session cookies).
+•	Do not log raw tokens; log token metadata (issuer, subject, scopes, token ID) where needed.
+•	Use a secrets manager for downstream credentials; rotate regularly.
+•	Prefer workload identity / short-lived credentials over static long-lived secrets for server-to-downstream authentication.
+ 
+9. Tool and Context Guardrails
+9.1 Treat the Model as an Untrusted Decision Maker
+In an MCP-based system, the model may propose tool calls and parameters. Treat those proposals as untrusted input. The server must validate and constrain execution just as it would for any external API client.
+•	Never assume the model will follow policies stated in prompts.
+•	Do not expose tools that can execute arbitrary code or arbitrary database modifications unless protected by strong approvals and isolation.
+•	Constrain tools to the minimum capabilities required for approved use cases.
+9.2 Input Validation Patterns
+For every tool, implement strict validation and normalization:
+•	JSON schema validation (types, required fields, allowed enums).
+•	Reject unknown fields and nested objects not explicitly supported.
+•	String sanitization and maximum lengths (prevents log injection and unexpected downstream behavior).
+•	Allowlists for identifiers (database/schema/table/space IDs, ServiceNow table names, Confluence space keys).
+•	Range limits for numeric parameters (maxRows, time windows, pagination).
+•	Safe defaults when parameters are omitted (for example, small page size).
+9.3 Output Filtering and Data Minimization
+Tool outputs become model context. Apply the same rigor as you would to an API that can leak regulated data.
+•	Return only the fields required for the use case; avoid returning entire records by default.
+•	Cap response sizes (rows, bytes, tokens) and require pagination for large result sets.
+•	Apply column masking/redaction for sensitive attributes (account numbers, identifiers, contact details).
+•	Apply DLP scanning/redaction for secrets and regulated data patterns.
+•	Prefer aggregated or summarized outputs over raw exports where possible.
+•	Annotate outputs with data classification and provenance metadata so the host can apply additional controls.
+9.4 Prompt Injection and Context Poisoning Mitigations
+MCP systems are vulnerable to prompt injection, including second-order injection through retrieved content (documents, tickets, emails). Mitigation requires multiple layers:
+•	Separate instructions from data: when injecting tool results into the model context, use clear delimiting and role separation; never merge retrieved text into system instructions.
+•	Tool gating: never let untrusted text directly trigger tool calls; require explicit user intent and/or policy checks.
+•	Suspicion signals: flag content that contains tool-like instructions (for example, 'call tool', 'ignore previous', 'exfiltrate') and require extra confirmation for sensitive actions.
+•	Least privilege: reduce the impact of a successful injection by limiting what tools and data are available in the session.
+•	Human approvals for write/high-risk actions: an injection should not be able to silently cause changes.
+9.5 Guardrails for Server-Initiated Capabilities (Sampling, Elicitation, Tasks)
+Client features like sampling and elicitation allow servers to initiate requests back to the client. These features enable advanced agentic behaviors, but they also create new attack surfaces.
+•	Disable sampling by default in regulated environments until a dedicated risk review is completed.
+•	If sampling is enabled, require a human-in-the-loop decision for any server-initiated sampling that could trigger tool use or access sensitive resources.
+•	Apply the same policy engine to server-initiated flows as to normal tool calls.
+•	For tasks/long-running operations, enforce task isolation and access control (task IDs must not leak across users).
+9.6 SSRF and Network Egress Controls for Connectors
+Connectors that fetch URLs or call arbitrary APIs can become SSRF vectors. Apply strict egress controls.
+•	Allowlist destination hosts and schemes; block private IP ranges unless explicitly required.
+•	Resolve DNS and validate IP ranges before connecting (prevent DNS rebinding).
+•	Disallow file:// and other local schemes unless required and sandboxed.
+•	Use a dedicated outbound proxy with logging and policy controls.
+•	Implement per-request timeouts and size limits.
+ 
+10. Deployment and Configuration Guidance
+10.1 Deployment Models
+Common deployment models for enterprise MCP servers:
+•	Developer workstation (local stdio): suitable for prototyping; not recommended for production access to sensitive systems unless tightly sandboxed.
+•	Bank-managed shared service (recommended for production): a centrally hosted MCP server per connector type (Snowflake, Confluence, ServiceNow) with multi-tenant identity-aware enforcement.
+•	Per-team or per-domain servers: useful when teams need custom tool sets or when data domains must be isolated (risk, finance, HR).
+•	Per-environment isolation: separate server instances and credentials for dev/test/prod; never share tokens or databases across environments.
+10.2 Configuration Strategy
+Aim for configuration that is centralized, versioned, and auditable. Avoid ad-hoc local configuration in production environments.
+•	Store configuration in a version-controlled repository (policy as code, tool catalogs, allowlists).
+•	Use environment variables or a secret store for secrets; never commit credentials.
+•	Use immutable deployments: build once, deploy many; promote artifacts through environments.
+•	Track configuration versions in runtime telemetry (policyVersion, toolCatalogVersion).
+•	Use feature flags for high-risk tools to allow rapid disablement without redeploying.
+10.3 Recommended Runtime Limits
+Set conservative defaults; increase only with evidence.
+Control	Default	Rationale	Notes
+Max tool call rate	Low (e.g., 1-5 RPS per user)	Prevents runaway loops and abuse	Tune by tool; stricter for exports
+Max rows returned	Small (e.g., 500-1,000)	Limits data exposure and token usage	Use pagination/aggregation
+Max response size	Bounded (bytes/tokens)	Prevents context flooding	Reject oversized responses
+Statement timeout	Short (e.g., 30s)	Protects downstream systems	Use async tasks for long jobs
+Concurrency per user	Limited (e.g., 2-5)	Prevents overload	Use circuit breakers
+Daily quota	Set per team/use case	Cost control	Escalate via request process
+
+10.4 CI/CD and SDLC Controls
+•	Code review required for tool definitions and policy changes.
+•	Static analysis and dependency vulnerability scanning on every build.
+•	Unit tests for policy evaluation and input validation.
+•	Integration tests against downstream systems using non-production data.
+•	Security tests for prompt injection and SSRF patterns.
+•	Artifact signing and provenance (supply chain security).
+•	Automated rollback strategy and canary deployments where possible.
+10.5 Operational Hardening Checklist
+•	Run as non-root; minimal OS permissions.
+•	Restrict outbound network access to known endpoints.
+•	Use TLS everywhere; enforce modern cipher suites.
+•	Rotate credentials and certificates regularly.
+•	Set alerting on authentication failures, policy denials, and anomalous access patterns.
+•	Implement health checks and readiness checks; ensure graceful shutdown and connection draining.
+•	Document runbooks for key rotation, incident response, and emergency disablement of tools.
+ 
+11. Connector Guardrail Templates
+11.1 Snowflake MCP Server Guardrails
+This section provides a generic guardrail template for building an MCP server that interfaces with a cloud data warehouse (Snowflake). Adapt the specifics to your Snowflake account structure, data governance policies, and security tooling.
+11.1.1 Recommended Tool Set
+Prefer a small set of constrained tools. Example tool categories:
+•	Metadata tools (Tier 0): list_databases, list_schemas, list_tables, describe_table (restricted to approved objects).
+•	Query tools (Tier 1): run_query_readonly with SELECT-only enforcement and strict limits.
+•	Semantic query tools (Tier 1): query_semantic_model where queries are constrained to a governed semantic layer.
+•	Search tools (Tier 1): search_documents / cortex_search-like capabilities that return small, relevant excerpts.
+•	Administrative tools (Tier 4, generally prohibited): create/alter/drop objects, grants, role changes.
+11.1.2 Identity and Access
+•	Use separate Snowflake roles for the MCP server; default to a read-only role.
+•	Prefer user-delegated access (per-user tokens) when possible. Where not possible, use a constrained service role and enforce user entitlements in the MCP server.
+•	Restrict access to approved databases/schemas using Snowflake grants plus server-side allowlists.
+•	Use row-level security and masking policies to prevent leaking sensitive rows/columns even for authorized users.
+11.1.3 SQL Guardrails (Critical)
+SQL execution is one of the highest-risk capabilities to expose through MCP. Implement multiple independent controls:
+•	SELECT-only enforcement: reject DDL/DML statements and multi-statement batches.
+•	Allowlist databases/schemas/tables and optionally enforce a view-only strategy (server queries only against approved views).
+•	Statement timeouts and warehouse/compute limits to prevent runaway queries.
+•	Result limits: enforce LIMIT and maximum rows/bytes returned, regardless of user input.
+•	Query tagging: tag queries with correlation IDs and user identity for auditing.
+•	Parameterization: where possible, use parameterized queries instead of string concatenation.
+Example: SQL validation and enforcement flow (pseudocode):
+function run_query_readonly(userContext, sqlText):
+  # 1) Parse and validate
+  ast = parse_sql(sqlText)
+  if ast.contains_multiple_statements(): deny("multi_statement_not_allowed")
+  if not ast.is_select_only(): deny("write_or_ddl_not_allowed")
+
+  # 2) Enforce allowlists
+  referenced = ast.list_referenced_objects()
+  if not all(referenced in POLICY.allowed_objects for referenced): deny("object_not_allowed")
+
+  # 3) Inject safety constraints
+  sqlSafe = enforce_limit(ast, max_rows=POLICY.max_rows)
+  sqlSafe = enforce_timeout(sqlSafe, seconds=POLICY.statement_timeout)
+
+  # 4) Execute under least-privilege role
+  session = snowflake_session(role=POLICY.role_for(userContext))
+  session.set_query_tag(correlation_id=userContext.correlation_id)
+  result = session.execute(sqlSafe)
+
+  # 5) Filter output
+  return redact_and_truncate(result, policy=POLICY.output_rules)
+
+
+11.1.4 Data Minimization Patterns
+•	Use projection allowlists: return only approved columns for a dataset.
+•	Mask sensitive identifiers (for example, account numbers) by default; allow unmasking only with explicit entitlements and approvals.
+•	Avoid exporting raw transaction-level datasets to the model; provide aggregated summaries where possible.
+•	Prefer semantic layers and pre-built views that encode business logic and security controls.
+11.1.5 Operational Controls
+•	Configure warehouse resource monitors and quotas to control cost.
+•	Implement query concurrency limits to protect critical warehouses.
+•	Log query text only after redaction; do not log raw results beyond what is required for audit.
+•	Enable alerting for unusual query patterns (large scans, repeated denials, access to sensitive schemas).
+11.2 Confluence MCP Server Guardrails
+A Confluence-like connector typically exposes knowledge content. The primary risks are data leakage, prompt injection via content, and over-broad access.
+11.2.1 Recommended Tool Set
+•	search_pages (Tier 0/1): search within approved spaces; return small snippets with page metadata.
+•	get_page (Tier 1): fetch a specific page by ID within approved spaces.
+•	list_spaces (Tier 0): list only spaces the user is entitled to see.
+•	write operations (Tier 2+): create_page, update_page - generally disable initially; require approvals if enabled.
+11.2.2 Content Handling Guardrails
+•	Space allowlists and per-user permission checks; never rely on 'search' alone to enforce access.
+•	Strip or sanitize HTML/macros and remove executable content from outputs.
+•	Return content in small, bounded chunks; avoid sending full page bodies unless required.
+•	Detect and flag pages that contain tool-like instructions or embedded secrets; apply additional confirmation for actions influenced by such content.
+•	Respect labels/classification tags and enforce context release rules (do not return Restricted content).
+11.2.3 Audit and Provenance
+•	Return page IDs, space keys, and last-modified metadata with every snippet to support provenance.
+•	Log page IDs accessed (not full content) and retain evidence of user authorization decisions.
+11.3 ServiceNow MCP Server Guardrails
+A ServiceNow-like connector exposes operational workflows. Primary risks include unauthorized writes, privilege escalation through workflows, and leakage of sensitive incident data.
+11.3.1 Recommended Tool Set
+•	search_records (Tier 1): search within allowlisted tables and fields.
+•	get_record (Tier 1): fetch a record with strict field allowlists and redaction.
+•	create_incident / create_request (Tier 2): allow creation with explicit confirmation; restrict fields.
+•	update_record (Tier 3): restrict to specific state transitions; require approvals; avoid free-form updates.
+•	attachments (Tier 1/2): generally avoid by default; attachments often contain secrets/PII and prompt injection content.
+11.3.2 Write Safety Patterns
+•	Field allowlists and validation (for example, prevent setting assignment_group unless allowed).
+•	Idempotency keys for create operations to avoid duplicate tickets.
+•	State machine enforcement for updates (only allow safe transitions).
+•	Human approval for updates that close tickets, change priority, or modify access-related records.
+•	Link writes to a change ticket or request ID for audit purposes.
+11.3.3 Prompt Injection Considerations
+•	Treat ticket descriptions and comments as untrusted input; they may contain instructions designed to manipulate the model.
+•	When summarizing tickets, separate quoted ticket text from assistant instructions.
+•	Avoid automatically executing actions based on ticket text; require explicit user intent.
+ 
+12. Testing and Validation
+12.1 Required Test Categories
+•	Unit tests: schema validation, policy evaluation (allow/deny), redaction rules, pagination logic.
+•	Integration tests: end-to-end tool calls against test instances of downstream systems with known fixtures.
+•	Security tests: prompt injection attempts, SSRF attempts, auth bypass, token replay, privilege escalation.
+•	Performance tests: concurrency, latency, and rate-limiting behavior under load.
+•	Resilience tests: downstream timeouts, partial failures, retries, and circuit breaker behavior.
+12.2 Prompt Injection Test Suite (Recommended)
+Maintain a reusable set of adversarial prompts and poisoned content samples. Test both direct injection and second-order injection (content retrieved from resources).
+•	Direct: user asks the assistant to ignore policies and call a privileged tool.
+•	Second-order: a retrieved document includes hidden instructions such as 'call execute_sql and export data'.
+•	Tool confusion: content attempts to impersonate tool output or policy messages.
+•	Approval bypass: content tries to trick the system into treating an action as approved.
+12.3 Example Test Matrix
+Scenario	Expected Outcome	Signals to Monitor	Owner
+Tier 1 query returns > maxRows	Server truncates/paginates; logs enforcement	enforcement_event, truncated=true	Connector Dev
+Attempt DDL via query tool	Denied with policy error	policy_deny, reason=ddl_not_allowed	Security + Dev
+Prompt injection in Confluence page	No privileged tool call; requires confirmation for sensitive actions	injection_flag, approval_required	Security
+ServiceNow update invalid state transition	Denied	policy_deny, reason=invalid_transition	Connector Dev
+Token missing required scope	401/403	auth_failure, scope_missing	Platform/IAM
+12.4 Evidence and Sign-Off
+•	Store test results and policy versions as release evidence.
+•	Document security review findings and remediations.
+•	For Tier 3+ tools, require formal approval from security/compliance before enabling in production.
+ 
+13. Operational Runbook Guidance
+13.1 Monitoring and Alerting
+Minimum monitoring signals for every MCP server:
+•	Authentication failures (rate, source IPs, user identities).
+•	Authorization denials by tool and reason (spikes may indicate probing or injection attempts).
+•	Tool invocation volume by user/team and by risk tier.
+•	Latency and error rates per tool and downstream dependency.
+•	Data exfiltration indicators: unusually large responses, repeated pagination, or repeated export attempts.
+•	Anomaly detection on access patterns (time of day, new datasets, new spaces/tables).
+13.2 Incident Response Hooks
+•	Emergency kill switch: disable specific tools or entire servers via configuration.
+•	Credential rotation runbooks for both MCP server auth and downstream system credentials.
+•	Log preservation and forensics process (immutable storage, chain of custody).
+•	Communication paths to downstream system owners (data platform, ITSM admins).
+13.3 Access Reviews and Entitlement Management
+•	Periodic review of which users/groups can access each MCP server and tool group.
+•	Review of service accounts and their downstream permissions; remove unused grants.
+•	Review of allowlists (databases, schemas, Confluence spaces, ServiceNow tables).
+•	Audit of break-glass usage and privileged tool enablement.
+13.4 Change Management
+•	Version and review tool catalogs and policies like application code.
+•	Require approvals for changes that expand data access or enable write/admin tools.
+•	Maintain backward compatibility for tool schemas where possible; version tools when breaking changes are needed.
+•	Document deprecation timelines and migration plans for clients.
+13.5 Data Retention and Privacy
+•	Define retention periods for MCP logs, traces, and cached tool results.
+•	Ensure log access is restricted; logs may contain regulated data even after redaction.
+•	If tool results are cached, encrypt at rest and apply TTL; do not cache Restricted data unless explicitly approved.
+ 
+Appendix A. MCP Server Guardrail Checklist
+Use this checklist during design reviews and before production deployment.
+Category	Requirement	Priority	Notes
+AuthN	Remote servers require strong authentication; no anonymous access	MUST	OAuth-based auth recommended for HTTP transport
+AuthZ	Tool-level authorization enforced server-side	MUST	Do not rely only on downstream permissions
+Validation	Strict input schema validation and allowlists	MUST	Reject unknown fields
+Execution	Read-only by default; writes require explicit approval workflows	MUST	Tier 2+ gating
+Data	Output minimization + redaction before returning results	MUST	Enforce maxRows/maxBytes
+Observability	Correlation IDs + structured audit logs	MUST	Export to SIEM/APM
+Limits	Rate limits, timeouts, concurrency controls	MUST	Protect downstream systems
+Supply chain	Artifact signing + dependency scanning	SHOULD	SBOM recommended
+Sandbox	Local servers sandboxed and run with minimal privileges	SHOULD	Particularly important for stdio
+Testing	Prompt injection and SSRF test suite executed	SHOULD	Include second-order injection
+ 
+Appendix B. Example Tool Definition Template
+A consistent tool definition template helps standardize controls across servers. This is a generic example; adapt to your SDK and server implementation.
+tool:
+  name: "system.action"
+  description: "What the tool does, in one sentence."
+  riskTier: "Tier 1"
+  inputSchema:
+    type: "object"
+    additionalProperties: false
+    required: ["paramA"]
+    properties:
+      paramA:
+        type: "string"
+        maxLength: 64
+      maxRows:
+        type: "integer"
+        minimum: 1
+        maximum: 1000
+  policy:
+    requiredScopes: ["mcp:tools:read"]
+    allowlists:
+      - "approved_object_1"
+      - "approved_object_2"
+    output:
+      redactPatterns: ["SSN", "PAN", "API_KEY"]
+      maxBytes: 200000
+      maxRows: 1000
+
+
+Appendix C. Glossary
+Term	Definition
+ABAC	Attribute-Based Access Control.
+DLP	Data Loss Prevention; controls that detect and prevent leakage of sensitive data.
+HITL	Human-in-the-loop; requires a human approval step before execution.
+Idempotency	Property where repeating a request produces the same effect; used to prevent duplicate writes.
+MCP	Model Context Protocol; a protocol for connecting AI hosts/clients to servers that expose tools, resources, and prompts.
+PDP/PEP	Policy Decision Point / Policy Enforcement Point; components of a policy-as-code architecture.
+Prompt injection	An attack that causes an LLM to follow malicious instructions embedded in user input or retrieved content.
+RLS	Row-Level Security; restricts which rows a user can see in a dataset.
+SSRF	Server-Side Request Forgery; abuse of a server to make unauthorized network requests.
+ 
+Appendix D. References
+Primary references used when compiling this guidance (non-exhaustive):
+•	Model Context Protocol Specification (latest): https://modelcontextprotocol.io/specification/latest
+•	MCP Architecture: https://modelcontextprotocol.io/specification/latest/architecture
+•	MCP Lifecycle: https://modelcontextprotocol.io/specification/latest/basic/lifecycle
+•	MCP Transports: https://modelcontextprotocol.io/specification/latest/basic/transports
+•	MCP Authorization: https://modelcontextprotocol.io/specification/latest/basic/authorization
+•	MCP Security Best Practices: https://modelcontextprotocol.io/specification/latest/basic/security_best_practices
+•	OpenAI MCP documentation: https://platform.openai.com/docs/mcp
+•	OpenAI Agents SDK MCP guides: https://openai.github.io/openai-agents-python/mcp/ and https://openai.github.io/openai-agents-js/guides/mcp/
