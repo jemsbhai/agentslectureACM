@@ -1,0 +1,262 @@
+## Contact Center IVR Data Use Cases
+
+### 1. Real-Time Call Volume Forecasting and Staffing Analysis
+
+**Scenario:** A workforce management analyst needs to understand call volume patterns to optimize agent scheduling. They want to analyze historical call volumes by time of day, day of week, and seasonal patterns to predict staffing requirements for the upcoming month.
+
+**MCP Tools Used:**
+- `cortex_analyst_query` — Natural language queries against call volume semantic views for pattern analysis
+- `execute_query` — Retrieves granular 15-minute interval data for detailed trend analysis
+- `invoke_custom_function` — Executes time-series forecasting model to predict future volumes
+
+**Sample Interaction:**
+> *"Show me average call volume by 30-minute interval for the past 12 weeks, broken down by day of week. Identify the peak hours for each day and calculate what our staffing levels should be assuming a 4-minute average handle time and 80% occupancy target."*
+
+**Value:** Reduces overstaffing costs by 12% while maintaining service levels through data-driven scheduling.
+
+---
+
+### 2. IVR Containment Rate Optimization
+
+**Scenario:** The self-service product owner wants to identify which IVR paths have low containment rates (customers opting out to speak with an agent) and understand where self-service improvements would have the greatest impact on call deflection.
+
+**MCP Tools Used:**
+- `cortex_analyst_query` — Analyzes containment rates by IVR menu path, customer segment, and call reason
+- `execute_query` — Retrieves detailed IVR traversal data showing exact menu sequences before agent transfer
+- `validate_query` — Pre-validates complex path analysis queries before execution
+
+**Sample Interaction:**
+> *"What are our IVR containment rates by menu path for the past quarter? Show me the top 10 paths where customers most frequently opt out to an agent, the average point in the menu tree where they abandon self-service, and the call reasons associated with each path."*
+
+**Value:** Identifies specific IVR paths for redesign, improving overall containment rate from 62% to 71%, reducing agent-handled calls by 45,000 monthly.
+
+---
+
+### 3. Average Handle Time Trend Analysis
+
+**Scenario:** The contact center operations manager notices average handle time (AHT) has been increasing over the past several weeks and needs to identify the root cause—whether it's specific call types, agent cohorts, or system issues.
+
+**MCP Tools Used:**
+- `cortex_analyst_query` — Queries AHT trends segmented by call reason, agent tenure, queue, and time period
+- `execute_query` — Retrieves call-level detail for outlier analysis
+- `explain_query` — Validates query execution plan for large date range analysis
+
+**Sample Interaction:**
+> *"Show me the week-over-week trend in average handle time for the past 8 weeks. Break this down by call disposition code and agent tenure band. Identify which specific call types have contributed most to the AHT increase and whether it's concentrated in specific agent groups."*
+
+**Value:** Pinpoints AHT increase to a new product launch generating unfamiliar call types, enabling targeted agent training that reduces AHT by 45 seconds within two weeks.
+
+---
+
+### 4. Queue Wait Time and Abandonment Correlation
+
+**Scenario:** Customer experience leadership wants to understand the relationship between wait times and call abandonment to establish service level targets that balance customer satisfaction with operational costs.
+
+**MCP Tools Used:**
+- `cortex_analyst_query` — Analyzes abandonment rates at various wait time thresholds
+- `invoke_custom_function` — Executes statistical correlation analysis between wait time and abandonment
+- `execute_query` — Retrieves interval-level data for granular abandonment curve analysis
+
+**Sample Interaction:**
+> *"Calculate abandonment rates at each 30-second wait time interval up to 10 minutes. Show me the inflection points where abandonment rate increases most sharply. Compare this pattern across our priority customer segment versus standard customers, and estimate the call volume impact of reducing target wait time from 90 seconds to 60 seconds."*
+
+**Value:** Establishes data-driven service level targets, identifying that 73% of abandonment occurs after 2 minutes, enabling focused investment in reducing wait times for high-value customers.
+
+---
+
+### 5. First Call Resolution Analysis
+
+**Scenario:** A quality assurance manager needs to analyze first call resolution (FCR) rates across different call types, identify which issues require multiple contacts, and understand the drivers of repeat calls.
+
+**MCP Tools Used:**
+- `cortex_analyst_query` — Queries FCR rates by call reason, channel, agent, and customer segment
+- `execute_query` — Retrieves customer contact history to identify repeat call patterns
+- `invoke_custom_function` — Executes customer journey linkage to connect related contacts
+
+**Sample Interaction:**
+> *"What is our first call resolution rate by call disposition code for the past quarter? Identify the top 10 call reasons with the lowest FCR, show the average number of contacts required to resolve each issue type, and calculate the typical time gap between initial contact and resolution for multi-contact issues."*
+
+**Value:** Identifies billing dispute calls as having 34% FCR rate, prompting process changes that improve resolution rate to 67% and reduce repeat call volume by 28,000 monthly.
+
+---
+
+### 6. Customer Callback Pattern Analysis
+
+**Scenario:** The digital transformation team is evaluating expansion of the callback feature and needs to understand current callback request patterns, fulfillment rates, and customer acceptance when callbacks are offered versus completed.
+
+**MCP Tools Used:**
+- `cortex_analyst_query` — Analyzes callback offer rates, acceptance rates, and fulfillment metrics
+- `execute_query` — Retrieves callback timing data showing promised versus actual callback times
+- `get_schema` — Explores callback-related tables to understand available metrics
+
+**Sample Interaction:**
+> *"Analyze our callback program performance for the past 6 months. What percentage of eligible callers are offered a callback? Of those offered, what percentage accept? What is our callback fulfillment rate within the promised window? Show me how these metrics vary by time of day, day of week, and queue type."*
+
+**Value:** Reveals callback acceptance rate of 78% but fulfillment within promised window of only 61%, identifying staffing gaps during callback peak periods.
+
+---
+
+### 7. IVR Speech Recognition Performance Analysis
+
+**Scenario:** The voice platform team needs to evaluate speech recognition performance across different IVR prompts, identify prompts with high no-input or no-match rates, and prioritize tuning efforts.
+
+**MCP Tools Used:**
+- `cortex_analyst_query` — Queries recognition success rates by prompt, customer language, and time period
+- `execute_query` — Retrieves detailed recognition event data including confidence scores
+- `invoke_custom_function` — Calculates statistical significance of performance differences across prompts
+
+**Sample Interaction:**
+> *"Show me speech recognition performance metrics by IVR prompt for the past quarter. Include successful recognition rate, no-input rate, no-match rate, and average confidence score. Identify prompts with recognition rates below 85% and rank them by call volume impact. Compare performance across English and Spanish language paths."*
+
+**Value:** Identifies 7 high-volume prompts with poor recognition performance, enabling targeted grammar tuning that improves overall IVR completion rate by 8%.
+
+---
+
+### 8. Transfer Rate and Routing Efficiency Analysis
+
+**Scenario:** The routing optimization team wants to analyze how often calls are transferred between queues or agents, identify unnecessary transfers, and measure the effectiveness of skills-based routing rules.
+
+**MCP Tools Used:**
+- `cortex_analyst_query` — Queries transfer rates by initial queue, destination queue, and call reason
+- `execute_query` — Retrieves multi-segment call data showing complete transfer chains
+- `validate_query` — Pre-validates complex join queries across call segment tables
+
+**Sample Interaction:**
+> *"What percentage of calls involve at least one transfer? Show me the most common transfer patterns (from queue to queue), average number of transfers per call by call reason, and handle time comparison between transferred versus non-transferred calls. Identify call types where more than 20% of calls require transfer."*
+
+**Value:** Discovers that 34% of mortgage inquiry calls transfer from general queue to specialist queue, prompting IVR prompt changes that route directly, reducing AHT by 2.3 minutes for those calls.
+
+---
+
+### 9. Post-Call Survey Score Analysis
+
+**Scenario:** The customer experience team needs to analyze post-call survey scores (CSAT, NPS) to identify which factors most influence customer satisfaction and where operational improvements would have the greatest impact on scores.
+
+**MCP Tools Used:**
+- `cortex_analyst_query` — Queries survey scores by call attributes including wait time, handle time, transfer count, and resolution status
+- `invoke_custom_function` — Executes regression analysis to identify satisfaction drivers
+- `execute_query` — Retrieves survey response details with call metadata
+
+**Sample Interaction:**
+> *"Analyze post-call survey scores for the past quarter. What is the average CSAT score by call reason and resolution status? Calculate the correlation between CSAT and key metrics: wait time, handle time, number of transfers, and first call resolution. Identify the threshold values where satisfaction drops significantly."*
+
+**Value:** Quantifies that each additional transfer reduces CSAT by 0.8 points on a 5-point scale, and wait times over 3 minutes reduce scores by 1.2 points, enabling prioritized improvement efforts.
+
+---
+
+### 10. Agent Performance Benchmarking
+
+**Scenario:** A contact center team lead needs to compare agent performance metrics across their team, identify top performers and those needing coaching, and understand performance trends over time.
+
+**MCP Tools Used:**
+- `cortex_analyst_query` — Queries agent-level metrics including AHT, FCR, transfer rate, and survey scores
+- `execute_query` — Retrieves agent performance data with appropriate role-based filtering
+- `invoke_custom_function` — Calculates percentile rankings and performance scores
+
+**Sample Interaction:**
+> *"Generate a performance comparison for agents in the Retail Banking queue for the past month. Include average handle time, first call resolution rate, transfer rate, calls per hour, and average CSAT score. Rank agents by a composite performance score and show their month-over-month trend. Flag any agents whose performance has declined more than 10% from the prior month."*
+
+**Value:** Enables data-driven coaching conversations, identifying specific metric areas for each agent and recognizing top performers for best practice sharing.
+
+---
+
+### 11. Peak Event Impact Analysis
+
+**Scenario:** Following a system outage, marketing campaign launch, or rate change announcement, the operations team needs to quickly quantify the impact on call volumes, wait times, and containment rates compared to normal patterns.
+
+**MCP Tools Used:**
+- `cortex_analyst_query` — Compares event period metrics against baseline periods
+- `execute_query` — Retrieves minute-level data for precise event window analysis
+- `get_query_history` — References previous analysis queries for consistent methodology
+
+**Sample Interaction:**
+> *"Compare call center metrics during the mobile app outage yesterday (2-5 PM) against the same time window for the previous four Tuesdays. Show me the percentage increase in call volume, change in IVR containment rate, average wait time comparison, and abandonment rate change. Calculate the total incremental agent hours consumed by the event."*
+
+**Value:** Quantifies outage impact at 340% call volume increase and $47,000 in incremental staffing costs, supporting business case for infrastructure investment.
+
+---
+
+### 12. Channel Migration and Deflection Tracking
+
+**Scenario:** The digital strategy team wants to measure the effectiveness of initiatives designed to deflect calls to digital channels, tracking whether customers who use digital channels subsequently reduce their call volume.
+
+**MCP Tools Used:**
+- `cortex_analyst_query` — Queries call volumes segmented by customer digital engagement status
+- `execute_query` — Retrieves customer-level contact history across channels
+- `invoke_custom_function` — Executes cohort analysis comparing pre/post digital adoption call patterns
+
+**Sample Interaction:**
+> *"For customers who enrolled in mobile banking in Q3, compare their average monthly call volume in the 6 months before enrollment versus the 6 months after. Break this down by call reason to identify which call types are most effectively deflected to digital. Calculate the net call deflection rate and annualized cost savings."*
+
+**Value:** Demonstrates that mobile banking enrollees reduce calls by 2.3 per year on average, with balance inquiry calls dropping 78%, supporting continued digital investment.
+
+---
+
+### 13. IVR Menu Path Optimization Analysis
+
+**Scenario:** The IVR design team is planning a menu restructure and needs to understand current customer navigation patterns, identify the most common paths, and find opportunities to reduce menu depth for frequent transactions.
+
+**MCP Tools Used:**
+- `cortex_analyst_query` — Analyzes menu selection frequencies and common traversal paths
+- `execute_query` — Retrieves complete IVR interaction logs with DTMF and speech inputs
+- `validate_query` — Pre-validates path sequence analysis queries
+
+**Sample Interaction:**
+> *"Map the top 20 IVR paths by volume for the past quarter, showing the complete menu selection sequence from entry to either self-service completion or agent transfer. Calculate average time spent in IVR for each path, identify paths where customers frequently use '0' to bypass menus, and show which paths have increased most in volume over the past year."*
+
+**Value:** Reveals that 45% of callers navigate to payment options, currently requiring 4 menu levels, supporting redesign to reduce to 2 levels and save 90 seconds per call.
+
+---
+
+### 14. Service Level Compliance and Interval Analysis
+
+**Scenario:** The workforce management team needs to analyze service level performance at the interval level, identify patterns of SLA misses, and understand the relationship between staffing, volume, and service level achievement.
+
+**MCP Tools Used:**
+- `cortex_analyst_query` — Queries service level metrics by interval, queue, and day type
+- `execute_query` — Retrieves interval-level staffing, volume, and SLA data
+- `invoke_custom_function` — Executes Erlang calculations for staffing optimization
+
+**Sample Interaction:**
+> *"Analyze service level performance at 30-minute intervals for the past 4 weeks. For each interval, show me actual call volume versus forecast, scheduled staff versus actual logged-in agents, and service level achieved versus target. Identify intervals where SLA was missed by more than 10 points and calculate the staffing gap that would have achieved target."*
+
+**Value:** Identifies consistent SLA misses at shift change intervals (11:30 AM, 3:30 PM), prompting staggered break schedules that improve daily SLA from 76% to 83%.
+
+---
+
+### 15. Customer Segmentation and Contact Behavior Analysis
+
+**Scenario:** The customer analytics team wants to understand how contact behavior differs across customer segments, including call frequency, channel preferences, call reasons, and service costs to serve.
+
+**MCP Tools Used:**
+- `cortex_analyst_query` — Queries contact metrics segmented by customer value tier, tenure, and product holdings
+- `execute_query` — Retrieves customer-level contact summaries with segment attributes
+- `invoke_custom_function` — Calculates cost-to-serve metrics by segment
+
+**Sample Interaction:**
+> *"Analyze contact center behavior by customer segment for the past 12 months. For each segment (Premier, Preferred, Standard), show average annual call volume, top 5 call reasons, IVR containment rate, average handle time, and estimated cost-to-serve. Identify which segments have the highest contact rates relative to their account values and which call reasons drive the most cost per segment."*
+
+**Value:** Reveals Standard segment generates 3.2x more calls per account than Premier but 1/5th the revenue, supporting targeted self-service improvements and proactive outreach for high-contact customers.
+
+---
+
+**Summary Table:**
+
+| Use Case | Primary Tools | Key Metrics | Business Impact |
+|----------|---------------|-------------|-----------------|
+| Call Volume Forecasting | Analyst, Query, Custom Function | Volume by interval, patterns | Staffing optimization |
+| IVR Containment | Analyst, Query | Containment rate, opt-out points | Call deflection |
+| AHT Trend Analysis | Analyst, Query, Explain | Handle time by segment | Efficiency improvement |
+| Wait Time/Abandonment | Analyst, Custom Function | Abandonment curve, thresholds | Service level optimization |
+| First Call Resolution | Analyst, Query, Custom Function | FCR rate, repeat contacts | Quality improvement |
+| Callback Analysis | Analyst, Query, Schema | Acceptance, fulfillment rates | Feature optimization |
+| Speech Recognition | Analyst, Query, Custom Function | Recognition rates, confidence | IVR tuning |
+| Transfer Analysis | Analyst, Query, Validate | Transfer rates, patterns | Routing optimization |
+| Survey Analysis | Analyst, Custom Function | CSAT, NPS, correlation | CX improvement |
+| Agent Benchmarking | Analyst, Query, Custom Function | AHT, FCR, CSAT by agent | Performance management |
+| Peak Event Impact | Analyst, Query | Volume lift, SLA impact | Incident quantification |
+| Channel Deflection | Analyst, Query, Custom Function | Call reduction by cohort | Digital ROI |
+| IVR Path Optimization | Analyst, Query, Validate | Path frequency, depth | Menu redesign |
+| Service Level Analysis | Analyst, Query, Custom Function | SLA by interval | Workforce management |
+| Segment Behavior | Analyst, Query, Custom Function | Contacts, cost by segment | Service strategy |
+
