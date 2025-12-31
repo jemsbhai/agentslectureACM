@@ -1,0 +1,347 @@
+
+MCP Server Guardrails
+Comprehensive Security and Operational Controls
+Generic Framework with Snowflake Banking Implementation
+Classification	Internal - Security Architecture
+
+Target Audience	Security, Engineering, Architecture, Compliance
+ 
+PART I
+Generic MCP Server Guardrails
+1. Introduction and Purpose
+Guardrails are the protective boundaries, constraints, and controls that govern how MCP servers operate, ensuring safe, secure, and predictable behavior. Unlike traditional security controls that focus on perimeter defense, guardrails operate at every layer of the MCP interaction—from initial connection through tool execution to response delivery. They represent the accumulated wisdom of defensive programming applied to AI-system integration.
+This document provides a comprehensive framework for implementing guardrails in MCP server deployments. Part I covers generic guardrails applicable to any MCP server regardless of the underlying data source or tooling. Part II provides specific guardrails for Snowflake MCP servers in banking environments, addressing the unique risks of SQL-based data access, Cortex AI services, and financial regulatory requirements.
+Core Guardrail Principles:
+•	Defense in Depth: Multiple overlapping controls so that failure of one doesn't compromise the system
+•	Fail Secure: When guardrails detect violations, default to denial rather than permissive fallback
+•	Least Privilege: Grant minimum necessary access; constrain operations to smallest required scope
+•	Complete Mediation: Every request passes through guardrail checks with no bypass paths
+•	Auditability: All guardrail decisions are logged for forensic analysis and compliance
+•	Configurability: Guardrails can be tuned per environment, user population, and risk tolerance
+ 
+2. Input Validation Guardrails
+Input validation guardrails ensure that all data entering the MCP server conforms to expected formats, ranges, and patterns. These guardrails are the first line of defense against injection attacks, malformed requests, and attempts to exploit unexpected input handling.
+2.1 Schema Validation
+Every tool invocation must validate input parameters against the tool's declared JSON Schema before any processing occurs. Schema validation catches type mismatches, missing required fields, constraint violations, and structural errors before they can propagate to backend systems.
+Validation Type	Implementation	Failure Action
+Type Checking	Validate string, number, boolean, array, object types	Reject with INVALID_PARAMS error
+Required Fields	Verify all required properties present	Reject listing missing fields
+Value Constraints	Enforce min/max, enum values, patterns	Reject with constraint violation details
+String Length	Enforce minLength/maxLength constraints	Reject oversized inputs
+Array Bounds	Enforce minItems/maxItems limits	Reject with size violation
+Additional Properties	Reject or strip unexpected fields	Strip silently or reject strictly
+2.2 Content Sanitization
+Beyond schema validation, content sanitization removes or escapes potentially dangerous content from input strings. This prevents injection attacks where malicious content is embedded within otherwise valid inputs.
+•	HTML/Script Stripping: Remove or escape HTML tags, JavaScript, and other active content from text inputs
+•	Control Character Removal: Strip null bytes, backspace characters, and other control sequences that could manipulate output
+•	Unicode Normalization: Normalize Unicode to canonical form to prevent homograph attacks and encoding exploits
+•	Path Traversal Prevention: Detect and block directory traversal sequences (../, ..\ ) in file path inputs
+•	Whitespace Normalization: Collapse excessive whitespace that could be used to evade pattern matching
+2.3 Size and Complexity Limits
+Input size guardrails prevent resource exhaustion attacks where adversaries submit extremely large or deeply nested inputs designed to consume server resources.
+Limit Type	Recommended	Rationale
+Maximum request size	1 MB	Prevents memory exhaustion
+Maximum string parameter	64 KB	Limits individual field processing
+Maximum array elements	1,000	Prevents iteration exhaustion
+Maximum JSON nesting depth	20 levels	Prevents stack overflow in parsing
+Maximum object properties	100	Limits hash table collision attacks
+2.4 Prompt Injection Prevention
+Prompt injection attacks attempt to manipulate AI model behavior by embedding instructions within user-provided data. MCP servers must implement guardrails to detect and neutralize these attacks before passing data to AI systems or executing operations based on AI-generated instructions.
+•	Instruction Pattern Detection: Scan inputs for patterns resembling system instructions, role assignments, or behavioral directives
+•	Delimiter Injection: Detect attempts to close instruction blocks or inject new conversation turns
+•	Context Boundary Enforcement: Maintain clear separation between system instructions, user inputs, and data context
+•	Output Instruction Filtering: Remove or flag responses that appear to contain instructions for subsequent operations
+•	Behavioral Consistency Monitoring: Track AI behavior patterns and alert on significant deviations suggesting successful injection
+ 
+3. Authentication and Authorization Guardrails
+3.1 Authentication Enforcement
+Authentication guardrails ensure that every request is associated with a verified identity before any processing occurs. These guardrails must be enforced consistently across all transport mechanisms and request types with no bypass paths.
+•	Pre-Initialize Authentication: Verify credentials before accepting the initialize request; reject connection attempts from unauthenticated clients
+•	Per-Request Validation: Validate authentication tokens on every request, not just at session start; detect expired or revoked credentials
+•	Token Lifetime Limits: Enforce maximum token lifetimes; require re-authentication for long-running sessions
+•	Failed Authentication Handling: Return generic error messages that don't reveal whether usernames exist; implement exponential backoff
+•	Credential Rotation Support: Accept both old and new credentials during rotation windows; force re-authentication after rotation completes
+3.2 Authorization Enforcement
+Authorization guardrails ensure that authenticated users can only access capabilities they are entitled to use. Authorization checks must occur at multiple levels with the most restrictive result prevailing.
+Authorization Level	Check Performed	Denial Action
+Server Access	Can user connect to this MCP server?	Reject connection with 401
+Capability Visibility	Can user see this tool in discovery?	Exclude from tools/list response
+Invocation Permission	Can user invoke this specific tool?	Return METHOD_NOT_FOUND or 403
+Parameter Scope	Can user specify these parameters?	Reject with scope violation error
+Data Access	Can user access the requested data?	Filter results or deny request
+3.3 Session Management
+Session guardrails control the lifecycle of client connections and ensure that session state cannot be exploited for unauthorized access.
+•	Session Timeout: Automatically terminate inactive sessions after configurable idle period (default: 30 minutes)
+•	Maximum Session Duration: Force re-authentication after absolute time limit regardless of activity (default: 8 hours)
+•	Concurrent Session Limits: Restrict number of simultaneous sessions per user to prevent credential sharing
+•	Session Binding: Bind sessions to client characteristics (IP, user agent) and invalidate on significant changes
+•	Secure Session Termination: Clear all session state on logout; prevent session fixation attacks
+3.4 Privilege Escalation Prevention
+Privilege escalation guardrails prevent users from gaining access beyond their authorized level through manipulation of requests, tool chaining, or exploitation of system behavior.
+•	Role Immutability: User roles cannot be modified by the user within a session; role changes require administrator action
+•	Cross-Tool Authorization: Each tool invocation re-validates authorization; successful invocation of one tool doesn't authorize others
+•	Result-Based Authorization: Don't grant additional access based on data discovered during operations
+•	Capability Downgrade Only: Tools can request reduced privileges but never elevated privileges mid-operation
+ 
+4. Rate Limiting and Resource Quotas
+Rate limiting and quota guardrails protect the MCP server and backend systems from resource exhaustion, whether through deliberate attacks or unintentional overload from legitimate but excessive usage patterns.
+4.1 Request Rate Limits
+Limit Type	Default	Window	Exceeded Action
+Requests per user	100	Per minute	429 with Retry-After
+Tool invocations per user	500	Per hour	429 with quota reset time
+Concurrent requests	10	Instantaneous	503 until slot available
+Global server requests	10,000	Per minute	503 for all users
+Burst allowance	2x base	10 seconds	Revert to base limit
+4.2 Resource Consumption Quotas
+Beyond request counts, resource consumption quotas limit the total resources a user can consume across all their requests. These quotas prevent single users from monopolizing shared resources.
+•	Compute Time Quota: Maximum CPU time per user per time window (e.g., 5 minutes of compute per hour)
+•	Data Transfer Quota: Maximum bytes of data returned per user per time window (e.g., 100 MB per hour)
+•	Memory Allocation Quota: Maximum concurrent memory allocation per user session (e.g., 512 MB)
+•	Backend Call Quota: Maximum calls to expensive backend systems per user per time window
+4.3 Timeout Guardrails
+Timeout guardrails ensure that operations complete within acceptable time limits, preventing resource tie-up from slow or hung operations.
+Timeout Type	Default	Application
+Connection timeout	10 seconds	Initial connection establishment
+Request timeout	30 seconds	Standard tool invocations
+Long-running operation timeout	5 minutes	Complex queries, batch operations
+Backend call timeout	15 seconds	Calls to databases, APIs
+Idle connection timeout	5 minutes	Inactive sessions
+4.4 Circuit Breaker Patterns
+Circuit breakers prevent cascading failures by stopping requests to failing backend systems, giving them time to recover. The circuit breaker transitions through three states: Closed (requests flow normally), Open (requests immediately fail), and Half-Open (limited requests test recovery).
+•	Failure Threshold: Trip circuit after N consecutive failures or error rate exceeds threshold (e.g., 50% over 10 requests)
+•	Open Duration: Keep circuit open for configurable period (e.g., 30 seconds) before attempting recovery
+•	Half-Open Probe: Allow single request through to test backend recovery; close circuit on success, reopen on failure
+•	Graceful Degradation: Return cached results or reduced functionality when circuit is open rather than hard failure
+ 
+5. Output Filtering and Response Controls
+Output guardrails ensure that responses returned to clients are safe, appropriate, and don't leak sensitive information. These guardrails operate on the data after backend operations complete but before delivery to the client.
+5.1 Sensitive Data Filtering
+Sensitive data filtering identifies and removes or masks confidential information that should not be returned to the client based on their authorization level.
+Data Type	Detection Method	Masking Action	Example
+SSN	Regex pattern	Show last 4 only	***-**-1234
+Credit Card	Luhn + pattern	Show last 4 only	****-****-****-5678
+Email Address	Email regex	Partial mask	j***@example.com
+Phone Number	Phone pattern	Show last 4 only	(***) ***-7890
+Account Number	Field metadata	Show last 4 only	********3456
+API Keys/Tokens	Known prefixes	Full redaction	[REDACTED]
+5.2 Response Size Limits
+Response size guardrails prevent overwhelming clients with excessively large responses and protect against data exfiltration through bulk retrieval.
+•	Maximum Response Size: Hard limit on total response payload (default: 10 MB); truncate or paginate larger results
+•	Row Count Limits: Maximum rows returned from queries (default: 10,000); require pagination for larger result sets
+•	Nested Object Depth: Maximum nesting in response objects (default: 20 levels); flatten deeper structures
+•	Array Length Limits: Maximum elements in response arrays (default: 10,000); truncate with continuation token
+5.3 Error Message Sanitization
+Error messages must be sanitized to prevent information leakage while remaining useful for debugging. Raw error messages from backend systems often contain sensitive details that should not be exposed to clients.
+•	Stack Trace Removal: Never expose internal stack traces; log internally but return generic error to client
+•	System Path Concealment: Remove file system paths, server names, and internal URLs from error messages
+•	Query Echo Prevention: Don't echo back the problematic query or input in error messages
+•	Error Code Mapping: Map internal error codes to standardized external codes; maintain mapping for support
+•	Correlation ID Provision: Return unique correlation ID for support escalation without exposing internal details
+ 
+6. Audit and Logging Guardrails
+Audit and logging guardrails ensure comprehensive, tamper-resistant records of all MCP operations for security investigation, compliance evidence, and operational troubleshooting.
+6.1 Mandatory Logging Events
+The following events must be logged with no opt-out option regardless of configuration:
+Event Category	Specific Events	Required Fields
+Authentication	Login success, login failure, logout, token refresh	User ID, timestamp, source IP, result
+Authorization	Access granted, access denied, scope violation	User ID, resource, action, decision
+Tool Invocation	All tools/call requests with parameters	User ID, tool name, params hash, result status
+Data Access	Queries executed, resources read, data returned	User ID, data classification, record count
+Guardrail Triggers	Rate limit hit, validation failure, circuit breaker trip	User ID, guardrail type, trigger details
+Configuration Changes	Tool enable/disable, limit changes, role updates	Admin ID, before/after values, timestamp
+6.2 Log Content Guardrails
+Log content guardrails ensure that audit logs themselves don't become a security vulnerability by containing sensitive data that could be exfiltrated or misused.
+•	Credential Exclusion: Never log passwords, tokens, API keys, or other authentication credentials
+•	PII Masking in Logs: Apply same masking rules to logged data as to response data
+•	Query Parameter Hashing: Log hash of parameters rather than raw values for sensitive tools
+•	Result Exclusion: Don't log full query results; log metadata (row count, classification) only
+•	Size Limits: Truncate oversized log entries to prevent log flooding attacks
+6.3 Log Integrity Guardrails
+Log integrity guardrails protect audit logs from tampering, ensuring they maintain evidentiary value for compliance and investigations.
+•	Write-Once Storage: Store logs in append-only storage that prevents modification or deletion
+•	Cryptographic Signing: Sign log entries with server key; include timestamp from trusted time source
+•	Hash Chaining: Each entry includes hash of previous entry, creating tamper-evident chain
+•	Real-Time Replication: Replicate logs to separate system in real-time; compare for tampering detection
+•	Access Segregation: Log access requires separate credentials from operational access; audit log access
+6.4 Anomaly Detection
+Anomaly detection guardrails analyze patterns in audit logs to identify suspicious behavior that may indicate attacks or policy violations.
+•	Baseline Establishment: Build behavioral baselines per user, role, and time period for comparison
+•	Volume Anomalies: Alert on unusual request volumes compared to historical patterns
+•	Access Pattern Anomalies: Detect access to unusual combinations of tools or data
+•	Temporal Anomalies: Flag access outside normal working hours for the user's role
+•	Geographic Anomalies: Detect impossible travel or access from unusual locations
+ 
+7. Tool-Specific Guardrails
+Beyond generic guardrails that apply to all MCP operations, individual tools may require specialized guardrails based on their function, the data they access, and the operations they perform.
+7.1 Tool Risk Classification
+Each tool should be classified by risk level to determine appropriate guardrail intensity:
+Risk Level	Characteristics	Guardrail Intensity	Example Tools
+Low	Read-only, public data, no PII	Standard	Schema lookup
+Medium	Internal data, aggregated PII	Enhanced	Analytics queries
+High	Individual PII, financial data	Maximum + Approval	Customer lookup
+Critical	Write operations, credentials, compliance	Maximum + MFA + Dual Control	Account modification
+7.2 Per-Tool Guardrail Configuration
+Each tool should have an explicit guardrail configuration specifying overrides from default behavior:
+•	Rate Limit Override: Tool-specific rate limit if different from default (e.g., expensive analytics limited to 10/hour)
+•	Timeout Override: Tool-specific timeout for long-running operations
+•	Result Size Limit: Maximum rows or bytes this tool may return
+•	Required Roles: Roles authorized to invoke this tool
+•	Masking Rules: Tool-specific output masking beyond default PII detection
+•	Approval Requirements: Whether tool requires human approval before execution
+•	Audit Intensity: Additional logging requirements for this tool
+7.3 Tool Chaining Guardrails
+When AI agents chain multiple tool calls together, additional guardrails prevent compound risk from accumulating across the chain.
+•	Chain Length Limit: Maximum number of tool calls in a single agent session (e.g., 20 calls)
+•	Cumulative Data Limit: Maximum total data accessed across all tools in a chain
+•	Sensitive Tool Sequence Detection: Alert on suspicious sequences (e.g., customer lookup followed by export)
+•	Cross-Tool Data Flow Tracking: Track how data from one tool is used in subsequent tools
+•	Chain Timeout: Maximum total time for a tool chain, shorter than sum of individual timeouts
+ 
+PART II
+Snowflake MCP Server Guardrails for Banking
+8. SQL Execution Guardrails
+SQL execution guardrails are critical for Snowflake MCP servers that enable natural language to SQL capabilities. These guardrails prevent SQL injection, limit query scope, and ensure that AI-generated queries comply with security and performance requirements.
+8.1 SQL Injection Prevention
+Multi-layered defenses against SQL injection attacks that could compromise data integrity or expose unauthorized information:
+Defense Layer	Implementation	Attack Prevented
+Parameterized Queries	All user values passed as bind parameters, never concatenated	Basic injection via string concatenation
+AST Validation	Parse SQL to AST and validate structure before execution	Structural attacks, multiple statements
+Statement Type Allow-List	Only allow SELECT; block INSERT, UPDATE, DELETE, DDL	Data modification attacks
+Function Deny-List	Block dangerous functions: COPY, PUT, GET, SYSTEM$	File access, system commands
+Comment Stripping	Remove SQL comments before validation	Comment-based obfuscation
+Union Detection	Detect and validate UNION clauses against original query intent	UNION-based data extraction
+8.2 Query Scope Restrictions
+Query scope guardrails limit what data AI-generated queries can access, ensuring queries stay within authorized boundaries:
+•	Database Allow-List: Queries may only reference databases explicitly allowed for the user's role
+•	Schema Allow-List: Further restrict to specific schemas within allowed databases
+•	Table Allow-List: For sensitive roles, explicitly enumerate allowed tables
+•	Column Restrictions: Block queries selecting from sensitive columns unless explicitly authorized
+•	Row-Level Security: Inject row-level security predicates into queries based on user context
+•	Cross-Database Join Prevention: Block queries joining across security boundaries
+8.3 Query Complexity Limits
+Query complexity guardrails prevent resource exhaustion from inefficient or maliciously complex queries:
+Complexity Limit	Default	Rationale
+Maximum tables in query	10	Limits join complexity
+Maximum subquery depth	5	Prevents nested complexity attacks
+Maximum CASE expressions	20	Limits conditional complexity
+Maximum CTEs	10	Bounds temporary result sets
+Maximum query length	50,000 chars	Prevents extremely long queries
+Estimated scan bytes limit	10 GB	Limits warehouse consumption
+Query timeout	60 seconds	Prevents runaway queries
+8.4 Result Set Guardrails
+Result set guardrails control what data is returned from queries to prevent bulk data extraction:
+•	Mandatory LIMIT Injection: Automatically append LIMIT clause if not present (default: 10,000 rows)
+•	Maximum LIMIT Override: Cap user-specified LIMIT to maximum allowed (e.g., user requests 1M, cap at 50K)
+•	Column Count Limit: Maximum columns in result set (default: 100)
+•	Result Size Limit: Maximum bytes in response payload (default: 50 MB)
+•	SELECT * Prevention: Require explicit column list; expand * to allowed columns only
+•	Aggregation Encouragement: For large tables, suggest aggregation rather than row-level retrieval
+ 
+9. Cortex AI Service Guardrails
+Snowflake Cortex AI services (Analyst, Search, Agents, Complete) require specialized guardrails addressing AI-specific risks including hallucination, prompt injection, and uncontrolled agent behavior.
+9.1 Cortex Analyst Guardrails
+Cortex Analyst converts natural language to SQL against semantic views. These guardrails ensure generated queries are safe and appropriate:
+•	Semantic View Restrictions: User can only query semantic views they have SELECT privilege on
+•	Generated SQL Validation: Apply all SQL guardrails to Analyst-generated queries before execution
+•	Query Preview Mode: Option to return generated SQL for human review before execution
+•	Verified Query Repository: Encourage use of pre-approved queries from VQR for sensitive operations
+•	Confidence Threshold: Require human confirmation for low-confidence query interpretations
+•	Conversation History Limits: Limit conversation context to prevent context manipulation attacks
+9.2 Cortex Search Guardrails
+Cortex Search enables semantic search over document content. Guardrails ensure appropriate access and result handling:
+•	Search Service Authorization: User must have USAGE privilege on the search service
+•	Result Limit Enforcement: Cap number of search results returned (default: 100)
+•	Filter Validation: Validate filter parameters against allowed attributes
+•	Chunk Size Limits: Limit returned text chunk size to prevent large context injection
+•	Source Attribution: Always include source document reference with search results
+•	PII in Documents: Apply PII masking to document content in search results
+9.3 Cortex Agent Guardrails
+Cortex Agents perform multi-step reasoning with multiple tool invocations. Agent guardrails prevent uncontrolled autonomous behavior:
+Guardrail	Default Setting	Purpose
+Maximum reasoning steps	10 steps	Prevent infinite loops
+Maximum tool calls per session	20 calls	Bound resource consumption
+Agent session timeout	5 minutes	Prevent runaway agents
+Human approval for actions	Required for high-risk tools	Human oversight
+Allowed tool set	Explicitly configured per agent	Principle of least privilege
+Intermediate result logging	All steps logged	Auditability and debugging
+9.4 Cortex LLM Function Guardrails
+Cortex LLM functions (COMPLETE, SUMMARIZE, SENTIMENT, etc.) require guardrails on input content and output usage:
+•	Input Length Limits: Maximum tokens in prompt (model-specific, typically 4K-128K)
+•	Output Token Limits: Cap max_tokens parameter to prevent excessive generation costs
+•	Model Selection Restrictions: Allow only approved models from model allow-list
+•	Temperature Constraints: Limit temperature parameter for deterministic use cases
+•	Content Filtering: Screen inputs and outputs for prohibited content
+•	PII in Prompts: Warn or block when PII detected in prompts sent to LLM
+ 
+10. Snowflake Data Protection Guardrails
+10.1 Dynamic Data Masking
+Leverage Snowflake's native dynamic data masking policies to protect sensitive data in MCP responses:
+•	Masking Policy Enforcement: MCP queries execute with masking policies applied based on executing role
+•	Policy Coverage Verification: Verify all PII columns have appropriate masking policies before MCP deployment
+•	Conditional Masking: Use CURRENT_ROLE() in masking policies for role-based reveal/mask decisions
+•	External Function Masking: Use external tokenization services for consistent masking across systems
+10.2 Row Access Policies
+Snowflake row access policies provide automatic row-level filtering for MCP queries:
+•	Geographic Restrictions: Users only see data for their assigned regions/branches
+•	Customer Ownership: Relationship managers only see their assigned customer data
+•	Data Classification: Filter rows by classification level based on user clearance
+•	Temporal Restrictions: Limit access to data within specific time ranges
+10.3 Object Tagging and Classification
+Use Snowflake object tagging to classify data and drive guardrail behavior:
+•	PII Tags: Tag columns containing PII to trigger automatic masking and enhanced logging
+•	Sensitivity Tags: Tag tables/schemas with sensitivity levels (Public, Internal, Confidential, Restricted)
+•	Regulatory Tags: Tag data subject to specific regulations (GDPR, CCPA, PCI, etc.)
+•	Tag-Based Guardrails: MCP guardrails query tags to determine appropriate handling
+10.4 Access History Integration
+Leverage Snowflake's ACCESS_HISTORY for comprehensive audit of MCP data access:
+•	Column-Level Tracking: ACCESS_HISTORY records which specific columns were accessed in each query
+•	Base Object Resolution: Tracks access through views to underlying base tables
+•	MCP Query Attribution: Include MCP session ID in query tags for correlation with MCP audit logs
+•	Compliance Reporting: Generate compliance reports from ACCESS_HISTORY for regulatory requirements
+ 
+11. Banking-Specific Regulatory Guardrails
+11.1 BSA/AML Investigation Guardrails
+Special guardrails for tools supporting suspicious activity investigation:
+•	Case Correlation: All queries must be associated with a case ID; ad-hoc access blocked
+•	Tipping Off Prevention: Block queries that could reveal investigation status to subjects
+•	Segregation of Duties: Separate roles for alert generation vs. investigation vs. SAR filing
+•	Investigation Audit Trail: Enhanced logging of all data accessed during investigations
+•	Data Retention: Investigation data retained per BSA requirements (5+ years)
+11.2 Fair Lending Guardrails
+Guardrails for tools that access lending decision data:
+•	Protected Class Data: Restrict access to demographic data; require justification and approval
+•	Analysis Type Restrictions: Certain analyses require fair lending officer approval
+•	Result Interpretation Warnings: Include appropriate caveats with disparate impact analyses
+•	Model Governance Integration: Track AI-assisted analysis in model inventory
+11.3 Privacy Rights Guardrails
+Guardrails supporting GDPR/CCPA data subject rights:
+•	Right to Access: Tools to generate data subject access reports from MCP queries
+•	Right to Erasure: Block queries for data subjects with pending erasure requests
+•	Consent Tracking: Filter data based on consent status stored in Snowflake
+•	Cross-Border Transfer: Enforce data residency requirements for EU/non-EU data
+11.4 SOX Compliance Guardrails
+Guardrails for financial data access supporting SOX compliance:
+•	Segregation of Duties: Enforce incompatible duty restrictions (e.g., preparer vs. approver)
+•	Period Lock: Block modification queries to closed financial periods
+•	Material Access Logging: Enhanced audit for access to material financial data
+•	Change Control Integration: MCP configuration changes subject to change management approval
+ 
+12. Guardrail Summary Reference
+12.1 Generic MCP Guardrails Quick Reference
+Category	Key Guardrails	Risk Mitigated	Priority
+Input Validation	Schema, sanitization, size limits	Injection attacks	Critical
+Authentication	Per-request, token lifetime, MFA	Unauthorized access	Critical
+Authorization	Multi-level, per-tool, data-level	Privilege escalation	Critical
+Rate Limiting	Request, quota, timeout	Resource exhaustion	High
+Output Filtering	PII masking, size limits, error sanitization	Data leakage	Critical
+Audit Logging	Mandatory events, integrity, retention	Compliance, forensics	Critical
+12.2 Snowflake-Specific Guardrails Quick Reference
+Category	Key Guardrails	Risk Mitigated	Priority
+SQL Injection Prevention	Parameterized, AST validation, deny-lists	SQL injection	Critical
+Query Scope	Database/schema/table allow-lists	Unauthorized data access	Critical
+Query Complexity	Table limits, depth limits, timeouts	Resource exhaustion	High
+Cortex Analyst	SQL validation, preview mode, VQR	AI-generated query risks	High
+Cortex Agents	Step limits, tool restrictions, approval gates	Autonomous agent risks	Critical
+Data Masking	Dynamic masking, row access policies	PII exposure	Critical
+Banking Regulatory	BSA/AML, fair lending, SOX, privacy	Compliance violations	Critical
+— End of Document —
