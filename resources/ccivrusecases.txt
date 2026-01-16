@@ -260,3 +260,99 @@
 | Service Level Analysis | Analyst, Query, Custom Function | SLA by interval | Workforce management |
 | Segment Behavior | Analyst, Query, Custom Function | Contacts, cost by segment | Service strategy |
 
+
+
+## Extra Use Cases  
+
+1. Overall Containment Rate Trending and Segmentation  
+Scenario: The IVR product owner needs to track overall containment rate trends and understand how containment varies by customer segment, call reason, and time of day.MCP Tools Used:
+
+cortex_analyst_query — Natural language queries against IVR semantic views
+execute_query — Retrieves granular containment data by segment
+Sample Interaction:
+
+"What is our weekly containment rate trend for the past 12 weeks? Break down by customer segment (Premier, Preferred, Standard), day of week, and hour of day. Show me which segments have containment rates below 60% and identify the top 3 call reasons driving agent escalation for each."
+Key Metrics: Containment rate (%), contained call count, escalated call count, containment by segment/time  
+
+
+2. Menu Option Dwell Time AnalysisScenario: The UX designer wants to understand how long callers spend on each IVR menu option to identify confusing prompts, overly long menus, or options where users hesitate.MCP Tools Used:
+
+cortex_analyst_query — Queries average dwell time by menu node
+execute_query — Retrieves node-level timing distributions
+Sample Interaction:
+
+"For each IVR menu node, show me the average dwell time, median dwell time, and 90th percentile dwell time. Flag any nodes where average dwell time exceeds 15 seconds or where the 90th percentile exceeds 30 seconds. Include the node description and parent menu path for context."
+Key Metrics: Dwell time (avg, median, p90), replay count per node, timeout rate per node  
+
+3. Full Self-Service Completion FunnelScenario: The self-service team needs to understand the complete funnel from IVR entry to successful self-service completion without agent involvement, identifying where drop-offs occur.MCP Tools Used:
+
+cortex_analyst_query — Funnel analysis across IVR stages
+execute_query — Step-by-step conversion data
+Sample Interaction:
+
+"Build a self-service completion funnel for balance inquiry and payment transactions. Show entry volume, percentage reaching authentication, percentage passing authentication, percentage reaching transaction menu, percentage initiating transaction, and percentage completing successfully without agent transfer. Identify the stage with the largest drop-off for each transaction type."
+Key Metrics: Stage conversion rate (%), absolute drop-off volume, funnel completion rate  
+
+4. Fully Contained Call Profile Analysis  Scenario: Management wants to understand the characteristics of calls that are fully contained (never touch an agent) to identify patterns that can be replicated across other call types.MCP Tools Used:
+
+cortex_analyst_query — Profiles fully contained calls
+execute_query — Retrieves call attributes for contained population
+Sample Interaction:
+
+"For calls that were fully contained in the IVR last month, show me: average IVR duration, most common menu paths taken, distribution by call reason, distribution by customer segment, time-of-day patterns, and authentication success rate. Compare these profiles to calls that escalated to agents."
+Key Metrics: Contained call count, contained call profile attributes, IVR duration for contained calls  
+
+5. IVR Error Rate and Error Type DistributionScenario: The IVR operations team needs to monitor system errors, understand error types, and prioritize fixes based on volume and impact on containment.MCP Tools Used:
+
+cortex_analyst_query — Error aggregation and trending
+execute_query — Detailed error logs with context
+Sample Interaction:
+
+"What are the total IVR errors by error type for the past 30 days? Show error codes, descriptions, volume, percentage of total calls affected, and trend (week-over-week change). For the top 5 error types, show which menu nodes they occur on and whether callers who experience errors are more likely to escalate to an agent."
+Key Metrics: Error count by type, error rate (%), error-to-escalation correlation, error trending  
+
+6. IVR Fault and System Failure AnalysisScenario: IT operations needs to identify and quantify IVR system faults (platform failures, integration timeouts, database errors) that interrupt the customer journey.MCP Tools Used:
+
+cortex_analyst_query — Fault aggregation by system component
+execute_query — Fault logs with timestamps and impact metrics
+Sample Interaction:
+
+"Show me all IVR system faults for the past 7 days. Categorize by fault type: platform timeout, backend integration failure, speech recognition failure, DTMF timeout, database error, and other. For each category, show occurrence count, affected call volume, time-to-recovery average, and impact on containment rate (calls that faulted vs. overall containment)."
+Key Metrics: Fault count by type, MTTR, fault-affected call volume, containment impact of faults  
+
+7. Authentication Failure Analysis  
+Scenario: The security and UX teams need to understand authentication failure patterns—where customers fail to verify identity—and the downstream impact on containment.MCP Tools Used:
+
+cortex_analyst_query — Auth failure analysis by method and step
+execute_query — Failed auth attempt details
+Sample Interaction:
+
+"Analyze IVR authentication for the past month. Show success rate by authentication method (PIN, last 4 SSN, account number, voice biometric). For failed attempts, show retry count before giving up, percentage who eventually succeed after retry, percentage who escalate to agent after auth failure, and percentage who abandon entirely. Identify if certain customer segments have disproportionately high auth failure rates."
+Key Metrics: Auth success rate (%), retry rate, auth-failure-to-escalation rate, abandonment after auth failure  
+
+8. Opt-Out Point Analysis (Zero-Out Behavior)Scenario: The containment improvement team needs to identify exactly where in the IVR journey customers opt out to speak with an agent and understand the opt-out triggers.MCP Tools Used:
+
+cortex_analyst_query — Opt-out analysis by menu node
+execute_query — Detailed opt-out event data
+Sample Interaction:
+
+"Map all agent opt-out points in the IVR for the past quarter. For each menu node where opt-out is possible, show: total opt-outs, opt-out rate relative to node visits, average time spent on node before opt-out, and the immediate prior nodes in the path. Rank nodes by opt-out volume and identify the top 10 'leakiest' points in the IVR."
+Key Metrics: Opt-out count by node, opt-out rate (%), dwell time before opt-out, opt-out path analysis  
+
+9. Repeat IVR Contact AnalysisScenario: The service quality team wants to identify customers who call the IVR multiple times within a short period, indicating the IVR failed to resolve their issue.MCP Tools Used:
+
+cortex_analyst_query — Repeat contact identification
+execute_query — Customer-level contact history
+Sample Interaction:
+
+"Identify all customers who contacted the IVR 2 or more times within a 24-hour period in the past month. Show: total repeat contact volume, percentage of total IVR calls these represent, most common call reasons for repeat contacts, containment rate for first call vs. subsequent calls, and average number of contacts per repeat-caller. Flag call reasons where repeat contact rate exceeds 20%."
+Key Metrics: Repeat contact rate (%), repeat contact volume, first-call containment for repeat callers  
+
+10. Menu Path Depth and Complexity AnalysisScenario: The IVR designer wants to understand how deep into the menu tree customers navigate and whether excessive depth correlates with lower containment.MCP Tools Used:
+
+cortex_analyst_query — Path depth analysis
+execute_query — Call-level path traversal data
+Sample Interaction:
+
+"Analyze IVR menu path depth for all calls last month. Show the distribution of maximum menu depth reached (1 level, 2 levels, 3+ levels, etc.). Calculate containment rate by depth level. Identify paths where customers reach depth 4+ and show their containment rate compared to overall. List the specific deep paths and their purpose."
+Key Metrics: Path depth distribution, containment by depth, deep-path call volume
