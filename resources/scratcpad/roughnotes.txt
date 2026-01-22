@@ -10,7 +10,7 @@
 
 5. HOW DOES CONFLUENCE CONSUME IMAGES ? IS IT JUST URL OR BINARY DATA ?
 
-6. Send Ali supporting document why mcp client does not store access or refresh token
+6. Send  supporting document why mcp client does not store access or refresh token
 
 7. what all configuration relevant stuff will be stored in azure app config for ocnluence mcp server, give details or can these configuration settings be put while configuring in the mcp gateway - workspace id etc
 
