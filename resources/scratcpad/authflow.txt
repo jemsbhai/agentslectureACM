@@ -1,0 +1,30 @@
+**Model Context Protocol Architecture: Token Storage and Management**
+
+**1. Executive Summary**
+Standard architecture for the Model Context Protocol (MCP) dictates that the MCP Client (e.g., generic AI interfaces, IDEs) does not store or manage upstream Access or Refresh tokens. Instead, these credentials are retained, managed, and rotated exclusively within the MCP Server instance. This separation ensures the Client remains a generic transport layer while the Server maintains domain-specific security and state.
+
+**2. Architectural Principles**
+The delegation of token management to the Server is driven by three primary architectural requirements:
+
+* **Separation of Concerns:** The MCP Client functions as a generic JSON-RPC interface. It is agnostic regarding the authentication protocols (e.g., OAuth 2.0, SAML) required by specific integrations like Confluence, Google Drive, or Slack. Embedding service-specific authentication logic within the Client would compromise its modularity.
+* **Security (Least Privilege):** By isolating the Refresh Token within the MCP Server, the system mitigates the risk of exfiltration. If a prompt injection attack were to compromise the Client context, the raw upstream credentials remain inaccessible because they are held in the Server’s separate process or container. The Server acts as a gatekeeper, validating tool requests before utilizing the token to contact the upstream API.
+* **Token Lifecycle Management:** OAuth tokens differ from static keys in that they expire and require rotation. The logic required to track expiration times and exchange Refresh Tokens for new Access Tokens constitutes domain-specific business logic. This logic belongs within the implementation layer (the Server), not the presentation layer (the Client).
+
+**3. Credential Classification and Storage**
+A functional distinction is made between static configuration and dynamic authentication credentials.
+
+* **Static API Keys (Client-Side Configuration):**
+Simple, non-rotating credentials, such as Personal Access Tokens (PATs), are frequently stored in the Client’s configuration file (e.g., `claude_desktop_config.json`). These are passed to the Server strictly as Environment Variables upon process initialization. The Client stores these only as opaque strings for transport.
+* **Dynamic OAuth Tokens (Server-Side Storage):**
+Access and Refresh tokens, which represent a dynamic user session, are managed by the MCP Server. The Server is responsible for persisting these tokens across sessions, utilizing local secure storage (such as a local database, encrypted file, or system keychain). The Client is never exposed to the raw Refresh Token.
+
+**4. The Authentication Workflow**
+For integrations requiring OAuth (such as Atlassian/Confluence), the authentication flow operates as follows:
+
+1. **Request Initiation:** The Client issues a tool request (e.g., "Read Page").
+2. **Authorization Check:** The Server checks its internal storage for a valid Access Token.
+3. **Authentication Challenge:** If no valid token exists, the Server returns a specific user-facing message or error containing a generic login URL.
+4. **External Authorization:** The user authenticates directly with the provider (e.g., Atlassian) via a web browser, bypassing the MCP Client entirely.
+5. **Token Persistence:** The resulting authorization code is exchanged by the Server for an Access and Refresh Token. These are immediately written to the Server's persistent storage.
+6. **Operational Continuity:** Subsequent requests are processed transparently. The Server automatically utilizes the stored Refresh Token to maintain session validity without further user or Client intervention.
+
