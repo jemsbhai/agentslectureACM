@@ -26,5 +26,23 @@ For integrations requiring OAuth (such as Atlassian/Confluence), the authenticat
 3. **Authentication Challenge:** If no valid token exists, the Server returns a specific user-facing message or error containing a generic login URL.
 4. **External Authorization:** The user authenticates directly with the provider (e.g., Atlassian) via a web browser, bypassing the MCP Client entirely.
 5. **Token Persistence:** The resulting authorization code is exchanged by the Server for an Access and Refresh Token. These are immediately written to the Server's persistent storage.
-6. **Operational Continuity:** Subsequent requests are processed transparently. The Server automatically utilizes the stored Refresh Token to maintain session validity without further user or Client intervention.
+6. **Operational Continuity:** Subsequent requests are processed transparently. The Server automatically utilizes the stored Refresh Token to maintain session validity without further user or Client intervention.  
+
+
+The Standard "Listener" Pattern (Zero Client Involvement) The industry-standard approach for desktop/local tools (similar to the gcloud auth login or aws sso login CLI workflows) bypasses the MCP Client entirely for the code exchange step.
+
+The Mechanism: The MCP Server, upon initiating the login request, spins up a temporary, lightweight HTTP listener on a local port (e.g., http://localhost:8080/callback).
+
+The Flow:
+Initiation: The MCP Server generates the Authorization URL and instructs the MCP Client to open it in the default system browser.
+
+Authentication: The user authenticates successfully on the Atlassian domain within their browser.
+
+Redirect: Atlassian redirects the browser to the registered redirect_uri (the temporary local listener).
+
+Capture: The MCP Server’s background listener captures the ?code=... parameter directly from the browser request.
+
+Completion: The MCP Server exchanges the code for tokens, closes the listener, and signals to the MCP Client (via the tool output) that authentication is complete.
+
+In this scenario, the authorization code never passes through the Large Language Model (LLM) context window or the MCP Client's UI layer.
 
