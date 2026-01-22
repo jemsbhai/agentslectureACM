@@ -29,20 +29,46 @@ For integrations requiring OAuth (such as Atlassian/Confluence), the authenticat
 6. **Operational Continuity:** Subsequent requests are processed transparently. The Server automatically utilizes the stored Refresh Token to maintain session validity without further user or Client intervention.  
 
 
-The Standard "Listener" Pattern (Zero Client Involvement) The industry-standard approach for desktop/local tools (similar to the gcloud auth login or aws sso login CLI workflows) bypasses the MCP Client entirely for the code exchange step.
+The Remote Workflow
+The solution would implement a  "Callback Endpoint" pattern.
 
-The Mechanism: The MCP Server, upon initiating the login request, spins up a temporary, lightweight HTTP listener on a local port (e.g., http://localhost:8080/callback).
+Phase 1: Initiation & Binding
+Request: The User (via MCP Client) asks to "List Confluence pages."
 
-The Flow:
-Initiation: The MCP Server generates the Authorization URL and instructs the MCP Client to open it in the default system browser.
+Identification: The MCP Server identifies the user.
 
-Authentication: The user authenticates successfully on the Atlassian domain within their browser.
+Mechanism: The MCP Client must be configured to send a unique identifier (e.g., an API Key or JWT in the HTTP Headers) when connecting to the Remote MCP Server.
 
-Redirect: Atlassian redirects the browser to the registered redirect_uri (the temporary local listener).
+State Generation: The MCP Server generates a secure, random state parameter. It stores this state in a temporary database (Redis/Memcached) linked to the User's ID.
 
-Capture: The MCP Server’s background listener captures the ?code=... parameter directly from the browser request.
+Storage: { "state_xyz123": "user_id_456" }
 
-Completion: The MCP Server exchanges the code for tokens, closes the listener, and signals to the MCP Client (via the tool output) that authentication is complete.
+Prompt: The Server returns a tool result containing the Login URL, embedding the state parameter:
+eg 
+https://auth.atlassian.com/authorize?client_id=...&state=xyz123&redirect_uri=https://mcp-api.corp.com/callback
 
-In this scenario, the authorization code never passes through the Large Language Model (LLM) context window or the MCP Client's UI layer.
+Phase 2: The Browser Handoff
+User Action: The user clicks the link in their chat interface.
 
+Authentication: The user authenticates with Atlassian in their system browser.
+
+Redirection: Atlassian redirects the browser to the Remote MCP Server's public endpoint:
+
+GET https://mcp-api.corp.com/callback?code=abc...&state=xyz123
+
+Phase 3: Resolution & Persistence
+Ingestion: The Remote MCP Server receives the code and state.
+
+Verification: The Server looks up the state ("xyz123") in its cache.
+
+Check: Does it exist? Is it expired?
+
+Retrieval: It retrieves "user_id_456".
+
+Exchange: The Server performs the backend-to-backend exchange with Atlassian (using the CLIENT_SECRET).
+
+Storage: The resulting Access/Refresh tokens are encrypted and stored in the persistent database, keyed explicitly to user_id_456.
+
+Completion: The browser shows a "Login Successful" HTML page.
+
+Tool Retry: The next time the User (User ID 456xxx) issues a prompt, the Server checks the database, finds the valid token, and executes the request.
