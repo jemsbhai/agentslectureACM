@@ -1,0 +1,18 @@
+1. Does the client need to get involved in the authorization CODE PASSAGE FROM ATLASSIAN TO MCP SERVER 
+
+2. hOW WOULD WE CONFIGURE THE FIREWALL FOR THE MCP SERVER SO THAT THE ATLASSIAN CAN HOT THE CALL BACK ENDPOINT ?
+
+2.5 Find andtell what kind of oauth authorizxation is this the one you guys are recommending
+
+3. jUST COORDINATE WITH THE DYNATRACE TEAM AND TELL THEM WE NED DYNATRACE TRACING ... SO WE DONT NEED OT ADD OPEN TELEMETRY CONTAINERS, we dont need to show that detail in the diagram
+
+4. rEMOVBE SIDECAR CONTIAERS (that much detail not needed, check CCIVR doc)
+
+5. HOW DOES CONFLUENCE CONSUME IMAGES ? IS IT JUST URL OR BINARY DATA ?
+
+6. Send Ali supporting document why mcp client does not store access or refresh token
+
+7. what all configuration relevant stuff will be stored in azure app config for ocnluence mcp server, give details or can these configuration settings be put while configuring in the mcp gateway - workspace id etc
+
+8. For every service added in the diagram, make sure you absolutely need it, otherwise remove it
+
