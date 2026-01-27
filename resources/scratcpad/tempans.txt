@@ -1,0 +1,413 @@
+
+What type of OAuth are we recommending for the custom MCP server Authorization ?
+
+We propose Authorization Code with PKCE (Proof Key for Code Exchange). It adds a dynamically generated secret (code verifier and challenge) to prevent authorization code interception attacks.
+
+This is how Auth Code with PKCE works (its benefits over the regular Auth Code Grant type)
+Step 0: Setup
+The MCP server is registered with the Atlassian authorization server and has a client_id
+The MCP server has registered redirect URIs
+The user wants to use an MCP tool that requires access to a protected resource
+Step 1: MCP Client initiates a request
+The user (through the MCP client) tries to use a tool that requires authorization. The MCP client connects to the MCP server.
+Step 2: MCP Server generates PKCE values
+The MCP server generates:
+code_verifier: a random string (43-128 characters)
+code_challenge: SHA256 hash of the verifier, base64url encoded
+The server stores the code_verifier temporarily, associated with this session.
+Step 3: MCP Server returns authorization URL
+The MCP server sends back an authorization URL to the MCP client:
+https://auth.example.com/authorize?
+  response_type=code&
+  client_id=mcp_server_client_id&
+  redirect_uri=https://mcp-server.com/callback&
+  scope=read write&
+  state=random_state_value&
+  code_challenge=hashed_verifier&
+  code_challenge_method=S256
+Step 4: MCP Client opens browser
+The MCP client opens this URL in the user's default browser. The user is now interacting directly with the Atlassian authorization server.
+Step 5: User authenticates and consents
+The user logs in (if needed, but wont be needed in our scenario since user would already be logged in using Azure AD while logging into RBC Assist Pro) and approves the requested permissions(consent screen for the first time).
+Step 6: Authorization server redirects with code
+The authorization server redirects the browser to the MCP server's callback URL:
+https://mcp-server.com/callback?code=AUTHORIZATION_CODE&state=random_state_value
+Step 7: MCP Server receives the code
+The MCP server:
+Validates the state parameter
+Extracts the authorization code
+Step 8: MCP Server exchanges code for tokens
+The MCP server makes a back-channel POST request:
+POST https://auth.example.com/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=authorization_code&
+code=AUTHORIZATION_CODE&
+redirect_uri=https://mcp-server.com/callback&
+client_id=mcp_server_client_id&
+code_verifier=original_random_string
+Step 9: Authorization server validates and returns tokens
+The authorization server:
+Hashes the code_verifier and confirms it matches the original code_challenge
+Returns tokens:
+json
+{
+  "access_token": "eyJhbGciOiJS...",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "refresh_token": "dGhpcyBpcyBh..."
+}
+Step 10: MCP Server stores tokens
+The MCP server stores the tokens securely, associated with the user's session.
+Step 11: User is notified
+The browser shows a success page (or redirects to close the tab). The MCP server notifies the MCP client that authorization is complete.
+Step 12: MCP Client can now use protected tools
+Subsequent requests from the MCP client to the MCP server can now access protected resources. The MCP server attaches the access token when calling external APIs.
+Token refresh
+When the access token expires, the MCP server uses the refresh token to get a new access token without requiring user interaction again.
+
+Does the client get involved at all when the Authorization code is getting passed/exchanged between Atlassian(Authorization server) and MCP Server ?
+
+Yes, The authorization code does pass through the client (the user's browser) — it's not a direct server-to-server exchange.
+
+Below is what happens in Authorization Code Grant (without PKCE)
+Authorization server(Atlassian) → User's browser (MCP Client/RBC Assist Pro): After the user approves, the authorization server redirects the browser to your callback URL with the code in the query string.
+User's browser → MCP Server: The browser follows that redirect, making a request to your server that includes the code.
+MCP server → Authorization server: Your server extracts the code and exchanges it for tokens in a back-channel request.
+With PKCe, an additional layer of security(and that is why we recommend it) is added and the process looks like this - 
+
+Before starting the flow, MCP server generates a random string called the code_verifier and keeps it stored locally (in memory, session storage, etc.)
+It creates a code_challenge by hashing the verifier (typically SHA256) and includes it in the initial authorization request:
+  https://auth.example.com/authorize?
+     response_type=code&
+     client_id=your_client_id&
+     redirect_uri=https://yourapp.com/callback&
+     code_challenge=hashed_verifier&
+     code_challenge_method=S256&
+
+The authorization server(Atlassian) stores this challenge alongside the authorization code it generates.
+The code travels through the browser as before (still visible during the redirect).
+When exchanging the code for tokens, MCP server sends the original code_verifier:
+  POST https://auth.example.com/token
+   
+   grant_type=authorization_code&
+   code=AUTHORIZATION_CODE&
+   code_verifier=original_random_string&
+
+The authorization server(Atlassian) hashes the verifier and checks if it matches the challenge from step 2. If it doesn't match, the exchange fails.
+So an attacker who intercepts the authorization code can't exchange it because they don't have the original code_verifier—only the MCP server does.
+
+
+
+
+3. Why is it better to store and maintain the access and refresh tokens on the MCP server’s side rather than on the MCP client ?
+Single Point of Revocation
+Server-side:
+Admin revokes user access → Delete token from MCP server DB → Immediate effect
+Client-side:
+Admin revokes user access → Hope token on MCP Client expires soon → Or somehow force client to delete it → Or invalidate at Confluence level
+With server-side storage, you can cut off access instantly. With client-side, the token still exists on the user's machine until it expires or the client cooperates.
+
+Centralized Audit Trail
+With server-side storage, server knows:
+Which users have active tokens
+When each token was last used
+Which tokens are approaching expiration
+Complete history of token issuance and revocation
+With client-side storage, we only see requests as they arrive. We have no visibility into:
+How many tokens exist
+Where they're stored
+Whether a user has shared their token
+Tokens that exist but aren't being used
+
+Token Never Transits the Network Repeatedly
+Client-side: Token travels from client to server with every single request. That's potentially thousands of network transmissions per day per user, each one an opportunity for interception (even with TLS, there are edge cases—compromised proxies, cert issues, logging middleware, etc.)
+Server-side: Token is transmitted once during authentication. After that, only a session identifier travels. The actual credential stays put.
+
+Simplified Client Implementation
+With server-side tokens, client doesn't need to:
+Implement secure storage (keychain integration, encryption at rest)
+Handle token refresh logic
+Manage token expiration and re-authentication flows
+Deal with storage across different operating systems
+Worry about secure memory handling
+The client just maintains a session. All the credential complexity lives on the server.
+
+Consistent Behavior Across Client Versions
+If token handling logic is in the client:
+Different client versions might handle tokens differently
+Bugs in older clients could leak or mishandle tokens
+Updating token logic requires deploying new client versions
+Users on old versions remain vulnerable
+If token handling is on the server:
+One implementation to maintain
+Fix bugs once, everyone benefits immediately
+No dependency on client update cycles
+
+Easier Token Rotation
+Server-side:
+Background job rotates tokens → Users don't notice → Zero disruption
+Client-side:
+Token rotation requires → Client to detect expiration → Re-authenticate → Store new token → Handle failures gracefully
+Server-side rotation is invisible to users. Client-side rotation requires coordination and can fail in various ways.
+
+Defense in Depth
+Even if the client is compromised, the attacker gets a session cookie, not the actual Confluence token.
+Session cookies can be short-lived
+Sessions can be invalidated server-side
+The actual token (which has broader access) never leaves your server
+This is an extra layer between a compromised client and Confluence data.
+
+Multi-Device Access Without Token Duplication
+User works from laptop and desktop:
+Client-side: Two copies of the token exist on two machines. Double the exposure. Or you need a sync mechanism.
+Server-side: One token on the server. User authenticates from either device, gets a session. Token stays singular.
+
+Prevents Credential Sharing
+Client-side: A user could copy their token and share it with a colleague (intentionally or accidentally).
+Server-side: The token is tied to a session. Users authenticate with their identity—they can't easily extract and share the underlying Confluence token.
+
+Graceful Handling of Token Expiration
+Server-side: When a token expires, the server can refresh it transparently. The user's session continues uninterrupted.
+Client-side: When a token expires, the client needs to:
+Detect the expiration
+Interrupt the user's workflow
+Trigger re-authentication
+Handle the case where refresh fails
+Server-side makes expiration invisible to users.
+
+Easier Debugging and Support
+When something goes wrong with authentication:
+Server-side: We can inspect the token state, check expiration, verify scopes, see the full picture in one place.
+Client-side: We need to ask the user to provide logs, check their local storage, figure out what version they're running, and reproduce their specific environment.
+
+Future Flexibility
+Server-side storage gives us options later:
+Add multi-factor authentication at the session level
+Implement step-up authentication for sensitive operations
+Add anomaly detection on token usage patterns
+Integrate with enterprise SSO more easily
+Support multiple Confluence instances per user
+Client-side storage bakes assumptions into deployed clients that are harder to change.
+
+Supporting docs - 
+
+Backend For Frontend (BFF) is the widely used pattern for such scenarios and with the MCP server present in the whole system, that can easily act as the backend that does the storage of the tokens rather than having to create a new backed specifically for this purpose. 
+
+https://docs.cyberark.com/identity-administration/latest/en/content/developer/oidc/tokens/token-storage.htm
+https://curity.io/resources/learn/spa-best-practices/
+https://auth0.com/docs/secure/security-guidance/data-security/token-storage
+https://fusionauth.io/articles/oauth/oauth-token-storage
+https://harish-bhattbhatt.medium.com/securing-front-end-applications-the-case-for-server-side-token-management-e0ec69de3a8c
+https://medium.com/@basakerdogan/oauth-2-0-security-best-practices-from-authorization-code-to-pkce-beccdbe7ec35
+
+4. How do confluence APIs consume image/attachment data ? Is it in the form of a url or binary image data or something else ?
+Images are uploaded as binary data using multipart/form-data encoding. The actual file bytes are sent in the request body. So in our case, we would not necessarily need to store images or files on the MCP Server side. We can just read/convert existing image into binary data and pass it on to Atlassian APIs.
+
+5. How will we need to configure the Firewall for the MCP server so that Atlassian can call the preconfigured callback URL on the MCP server ?
+The authorization server does not directly call the MCP server. Instead, it redirects the user's browser to the callback URL.
+
+To achieve this, we would configure the firewall in such a way so that it allows inbound requests only on corporate network or VPN which in turn have already know IP ranges. It would look something like the below - 
+
+
+
+6. What all configuration relevant stuff will be stored in Azure app config for confluence MCP server, give details. Can these configuration settings also be put on the MCP gateway rather than the server ?
+
+Non-secret config settings are recommended to be put on Azure App Config whereas secret settings or things like access and refresh tokens are recommended to be put on Azure Key Vault.
+
+As far as whether storing them on the MCP server side vs MCP gateway goes, anything that is domain specific should reside on the MCP server side and only anything routing or rate limiting related can/should be stored on the MCP gateway side of things. The table below lists examples of types of settings and where should they ideally reside.
+
+
+Category
+Config Type
+Examples
+Best Location
+Why
+Access Scope
+Allowed / denied spaces
+ENG, HR, deny LEGAL
+MCP Server
+Requires Confluence domain knowledge
+
+
+Allowed content types
+page, blog, whiteboard
+MCP Server
+Enforced at data retrieval
+
+
+Label allowlist
+ai-searchable=true
+MCP Server
+Prevents accidental data exposure
+
+
+Max page depth
+3, 5
+MCP Server
+Controls traversal safety
+Security & Governance
+PII handling mode
+block, redact, mask
+MCP Server
+Needs content inspection
+
+
+Sensitive label rules
+confidential, restricted
+MCP Server
+Data-level enforcement
+
+
+Attachment policy
+allow PDFs only
+MCP Server
+Requires content awareness
+
+
+Max content size
+tokens / chars
+MCP Server
+Prevents leakage + cost spikes
+Identity & OAuth
+Tenant base URL
+*.atlassian.net
+Server (+ Key Vault)
+Server actually calls Confluence
+
+
+OAuth scopes
+read-only
+Server
+Tied to API semantics
+
+
+Token refresh strategy
+proactive / lazy
+Server
+Coupled with API usage
+Retrieval Behavior
+Search strategy
+CQL / hybrid
+MCP Server
+Domain-specific querying
+
+
+Result limits
+max 20 pages
+MCP Server
+Prevents over-fetch
+
+
+Recency bias
+90 / 180 days
+MCP Server
+Ranking logic is local
+Context Building
+Chunk size / overlap
+800 / 200
+MCP Server
+Affects LLM context
+
+
+Summarization mode
+raw / summarized
+MCP Server
+Content shaping
+
+
+Max tokens per response
+8k / 16k
+MCP Server
+Controls output safety
+Platform Protection
+Rate limiting
+per user / tenant
+Gateway
+Cross-cutting concern
+
+
+Concurrency limits
+5–10
+Gateway
+Traffic shaping
+
+
+Timeouts / retries
+exponential
+Gateway
+Infrastructure-level
+
+
+Circuit breaker
+fail-fast
+Gateway
+Protects backend
+Feature Control
+Tool enable/disable
+search, summarize
+Gateway (flag)
+Global kill switch
+
+
+Attachment disable
+on/off
+Gateway + Server
+Defense in depth
+
+
+Emergency shutdown
+global off
+Gateway
+Fast containment
+Multi-Tenant
+Tenant → spaces map
+tenantA → ENG
+Server
+Domain enforcement
+
+
+Per-tenant limits
+token / rate
+Gateway + Server
+Shared responsibility
+
+
+Environment mode
+dev / prod
+Both
+Behavior changes
+Observability
+Audit level
+metadata / hashes
+Both
+Platform + domain view
+
+
+
+
+
+
+
+
+
+
+
+
+User attribution
+AAD ID / hash
+Both
+Compliance
+Caching
+Metadata TTL
+5–30 min
+Server
+Domain-aware caching
+
+
+Page content TTL
+1–24 hrs
+Server
+Safe reuse
+
+
