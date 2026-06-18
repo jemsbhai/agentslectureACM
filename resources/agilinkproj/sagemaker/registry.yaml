@@ -1,0 +1,76 @@
+# Mini-VLM benchmark — model registry.
+# Both download_models.py and smoke_test.py read this file.
+#
+# Fields per model:
+#   name         short id used for the local folder name and CLI selection
+#   repo_id      exact Hugging Face repo id (case-sensitive)
+#   params       approximate parameter count (VERIFY off the model card for the final table)
+#   model_class  transformers class to load with (resolved via getattr on `transformers`)
+#   profile      inference handler in smoke_test.py: "hf_chat" or "phi4_legacy"
+#   gated        true if the HF repo requires accepting a license + an HF_TOKEN
+#   env          which Python environment runs it: "main" (transformers>=4.57) or "phi4" (==4.48.2)
+#   default_run  whether smoke_test.py runs it by default (Phi-4 is false: separate venv)
+#   trust_remote_code  set true only where the model card requires it
+#   notes        anything to remember
+
+models:
+  - name: smolvlm2-2.2b
+    repo_id: HuggingFaceTB/SmolVLM2-2.2B-Instruct
+    params: "2.2B"
+    model_class: AutoModelForImageTextToText
+    profile: hf_chat
+    gated: false
+    env: main
+    default_run: true
+    notes: "Fully open (weights+data+code). Tiny anchor for the size sweep."
+
+  - name: qwen3-vl-4b
+    repo_id: Qwen/Qwen3-VL-4B-Instruct
+    params: "~4.8B"
+    model_class: Qwen3VLForConditionalGeneration
+    profile: hf_chat
+    gated: false
+    env: main
+    default_run: true
+    notes: "Current-gen Qwen. REQUIRES transformers >= 4.57 (else ImportError on the class)."
+
+  - name: gemma3-4b
+    repo_id: google/gemma-3-4b-it
+    params: "4B"
+    model_class: AutoModelForImageTextToText
+    profile: hf_chat
+    gated: true
+    env: main
+    default_run: true
+    notes: "GATED. Accept license at the model page + set HF_TOKEN. Gemma license (not OSI)."
+
+  - name: qwen2.5-vl-7b
+    repo_id: Qwen/Qwen2.5-VL-7B-Instruct
+    params: "7B"
+    model_class: Qwen2_5_VLForConditionalGeneration
+    profile: hf_chat
+    gated: false
+    env: main
+    default_run: true
+    notes: "The 7B workhorse; strong on charts/documents/OCR. Apache-2.0."
+
+  - name: internvl3-8b
+    repo_id: OpenGVLab/InternVL3-8B-hf
+    params: "8B (borderline > 7B)"
+    model_class: AutoModelForImageTextToText
+    profile: hf_chat
+    gated: false
+    env: main
+    default_run: true
+    notes: "Use the '-hf' native variant (unified processor API), NOT the custom .chat() checkpoint."
+
+  - name: phi4-multimodal
+    repo_id: microsoft/Phi-4-multimodal-instruct
+    params: "5.6B"
+    model_class: AutoModelForCausalLM
+    profile: phi4_legacy
+    trust_remote_code: true
+    gated: false
+    env: phi4
+    default_run: false
+    notes: "SEPARATE venv (transformers==4.48.2). Custom prompt tags <|user|><|image_1|>...<|end|><|assistant|>."

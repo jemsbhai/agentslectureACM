@@ -1,0 +1,23 @@
+# Main env for the 5 unified-API VLMs (SmolVLM2, Qwen3-VL, Gemma 3, Qwen2.5-VL, InternVL3-hf).
+# Qwen3-VL needs transformers >= 4.57.
+#
+# IMPORTANT: On SageMaker, PyTorch + CUDA are usually preinstalled. Verify first:
+#   python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
+# If that prints a CUDA-enabled torch, do NOT reinstall torch -- just install the rest below
+# (reinstalling torch over the system build often breaks CUDA).
+#
+# If `pip install transformers>=4.57` fails because 4.57 isn't on PyPI yet, use source:
+#   pip install "git+https://github.com/huggingface/transformers.git"
+
+transformers>=4.57.0
+accelerate>=1.0.0
+qwen-vl-utils==0.0.14
+timm
+einops
+sentencepiece
+pillow
+huggingface_hub>=0.26
+pyyaml
+
+# Optional but a big speed/VRAM win on A100 (install AFTER a working torch):
+#   pip install flash-attn --no-build-isolation

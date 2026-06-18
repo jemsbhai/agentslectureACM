@@ -1,0 +1,25 @@
+# SEPARATE venv for Phi-4-multimodal ONLY.
+# Its remote code is pinned to these versions. Do NOT mix with the main env:
+# Phi-4 needs transformers==4.48.2, Qwen3-VL needs >=4.57 -- mutually exclusive.
+#
+# Create an isolated venv first, then install:
+#   python -m venv ~/venv-phi4
+#   source ~/venv-phi4/bin/activate
+#   pip install -r requirements-phi4.txt
+
+torch==2.6.0
+torchvision==0.21.0
+transformers==4.48.2
+accelerate==1.3.0
+peft==0.13.2
+backoff==2.2.1
+soundfile==0.13.1
+scipy==1.15.2
+pillow==11.1.0
+huggingface_hub>=0.26
+pyyaml
+
+# flash-attn is recommended by the model card but optional; the smoke test defaults
+# to eager attention. For the faster path on A100:
+#   pip install flash-attn==2.7.4.post1 --no-build-isolation
+#   (then run: PHI4_ATTN=flash_attention_2 python scripts/smoke_test.py --models phi4-multimodal)
