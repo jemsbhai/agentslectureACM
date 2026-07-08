@@ -1,0 +1,200 @@
+# VLM benchmark - model registry (H100 80GB candidate set, LECT / SageMaker).
+# Both download_models.py and smoke_test.py read this file.
+#
+# Selection criterion: fits a single H100 (80GB). All entries load at bf16 for a
+# SHORT-context smoke test. For full 256K-context production runs, entries flagged
+# in `notes` may need quantization; Gemma 4 31B is borderline at bf16 (~62 GB weights
+# plus KV cache/activations).
+#
+# Two Python environments (see README), because transformers versions conflict:
+#   env: main  -> latest transformers (Gemma 4 AND Qwen3-VL both need recent builds)
+#   env: phi4  -> transformers==4.48.2 (Phi-4-multimodal only, custom prompt + trust_remote_code)
+#
+# Loader fallback: smoke_test.py tries `model_class`, then falls back to
+# AutoModelForImageTextToText. So an approximate class name for a brand-new model
+# still loads if the Auto class is registered.
+
+models:
+  # ---- small (<= 8B) ----
+  - name: gemma4-e2b
+    repo_id: google/gemma-4-E2B-it
+    params: "2B effective (PLE)"
+    model_class: AutoModelForImageTextToText
+    profile: hf_chat
+    gated: true
+    env: main
+    default_run: true
+    notes: "Gemma 4 edge model. Apache-2.0 but Google repos usually need HF license acceptance + token. Needs latest transformers."
+
+  - name: gemma4-e4b
+    repo_id: google/gemma-4-E4B-it
+    params: "4B effective (PLE)"
+    model_class: AutoModelForImageTextToText
+    profile: hf_chat
+    gated: true
+    env: main
+    default_run: true
+    notes: "Gemma 4 edge model. Needs latest transformers; may need HF token."
+
+  - name: smolvlm2-2.2b
+    repo_id: HuggingFaceTB/SmolVLM2-2.2B-Instruct
+    params: "2.2B dense"
+    model_class: AutoModelForImageTextToText
+    profile: hf_chat
+    gated: false
+    env: main
+    default_run: true
+    notes: "Fully open. Tiny anchor for the size sweep. English-only."
+
+  - name: qwen3-vl-4b
+    repo_id: Qwen/Qwen3-VL-4B-Instruct
+    params: "4B dense"
+    model_class: Qwen3VLForConditionalGeneration
+    profile: hf_chat
+    gated: false
+    env: main
+    default_run: true
+    notes: "Needs transformers >= 4.57."
+
+  - name: gemma3-4b
+    repo_id: google/gemma-3-4b-it
+    params: "4B dense"
+    model_class: AutoModelForImageTextToText
+    profile: hf_chat
+    gated: true
+    env: main
+    default_run: true
+    notes: "GATED: accept license + HF_TOKEN. Image+text only."
+
+  - name: phi4-multimodal
+    repo_id: microsoft/Phi-4-multimodal-instruct
+    params: "5.6B (LoRA adapters)"
+    model_class: AutoModelForCausalLM
+    profile: phi4_legacy
+    trust_remote_code: true
+    gated: false
+    env: phi4
+    default_run: false
+    notes: "SEPARATE venv (transformers==4.48.2). Custom prompt tags. Run: --models phi4-multimodal in the phi4 venv."
+
+  - name: qwen2.5-vl-7b
+    repo_id: Qwen/Qwen2.5-VL-7B-Instruct
+    params: "7B dense"
+    model_class: Qwen2_5_VLForConditionalGeneration
+    profile: hf_chat
+    gated: false
+    env: main
+    default_run: true
+    notes: "Strong document/OCR baseline."
+
+  - name: qwen3-vl-8b
+    repo_id: Qwen/Qwen3-VL-8B-Instruct
+    params: "8B dense"
+    model_class: Qwen3VLForConditionalGeneration
+    profile: hf_chat
+    gated: false
+    env: main
+    default_run: true
+    notes: "Needs transformers >= 4.57."
+
+  - name: internvl3-8b
+    repo_id: OpenGVLab/InternVL3-8B-hf
+    params: "8B dense"
+    model_class: AutoModelForImageTextToText
+    profile: hf_chat
+    gated: false
+    env: main
+    default_run: true
+    notes: "Use the -hf native variant for the unified processor API."
+
+  # ---- mid (12 - 14B) ----
+  - name: gemma3-12b
+    repo_id: google/gemma-3-12b-it
+    params: "12B dense"
+    model_class: AutoModelForImageTextToText
+    profile: hf_chat
+    gated: true
+    env: main
+    default_run: true
+    notes: "GATED. Image+text only."
+
+  - name: gemma4-12b
+    repo_id: google/gemma-4-12B-it
+    params: "12B dense (encoder-free / unified)"
+    model_class: AutoModelForImageTextToText
+    profile: hf_chat
+    gated: true
+    env: main
+    default_run: true
+    notes: "Gemma 4 unified (encoder-free) 12B. Needs latest transformers; the encoder-free path is new, watch for loader issues."
+
+  - name: internvl3-14b
+    repo_id: OpenGVLab/InternVL3-14B-hf
+    params: "14B dense"
+    model_class: AutoModelForImageTextToText
+    profile: hf_chat
+    gated: false
+    env: main
+    default_run: true
+    notes: "If the -hf repo 404s, switch to OpenGVLab/InternVL3-14B (custom .chat() path, needs a separate handler)."
+
+  # ---- large (24 - 32B, fit H100 at bf16; some need quant for full context) ----
+  - name: gemma4-26b-a4b
+    repo_id: google/gemma-4-26B-A4B-it
+    params: "26B total, ~4B active (MoE)"
+    model_class: AutoModelForImageTextToText
+    profile: hf_chat
+    gated: true
+    env: main
+    default_run: true
+    notes: "MoE, ~50 GB weights. Quantization may be needed for full context. Needs latest transformers."
+
+  - name: gemma3-27b
+    repo_id: google/gemma-3-27b-it
+    params: "27B dense"
+    model_class: AutoModelForImageTextToText
+    profile: hf_chat
+    gated: true
+    env: main
+    default_run: true
+    notes: "GATED. ~54 GB weights; quant may be needed for full context."
+
+  - name: qwen3-vl-30b-a3b
+    repo_id: Qwen/Qwen3-VL-30B-A3B-Instruct
+    params: "30B total, ~3B active (MoE)"
+    model_class: Qwen3VLMoeForConditionalGeneration
+    profile: hf_chat
+    gated: false
+    env: main
+    default_run: true
+    notes: "MoE, ~60 GB weights. Class name is a best guess; loader falls back to AutoModelForImageTextToText. Quant may be needed for full context."
+
+  - name: qwen2.5-vl-32b
+    repo_id: Qwen/Qwen2.5-VL-32B-Instruct
+    params: "32B dense"
+    model_class: Qwen2_5_VLForConditionalGeneration
+    profile: hf_chat
+    gated: false
+    env: main
+    default_run: true
+    notes: "~64 GB weights; quant may be needed for full context."
+
+  - name: qwen3-vl-32b
+    repo_id: Qwen/Qwen3-VL-32B-Instruct
+    params: "32B dense"
+    model_class: Qwen3VLForConditionalGeneration
+    profile: hf_chat
+    gated: false
+    env: main
+    default_run: true
+    notes: "~64 GB weights; quant may be needed for full context. Needs transformers >= 4.57."
+
+  - name: gemma4-31b
+    repo_id: google/gemma-4-31B-it
+    params: "31B dense"
+    model_class: AutoModelForImageTextToText
+    profile: hf_chat
+    gated: true
+    env: main
+    default_run: true
+    notes: "Gemma 4 flagship dense, ~62 GB weights. Borderline on 80GB at full context (tracking doc marks H100 Fits = No). Smoke test uses short context so it loads. Needs latest transformers."

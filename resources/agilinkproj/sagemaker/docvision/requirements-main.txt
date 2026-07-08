@@ -1,0 +1,26 @@
+# Main env for all unified-API VLMs in the H100 candidate set.
+# Gemma 4 (Apr 2026) AND Qwen3-VL both need a recent transformers, so this env
+# uses the LATEST transformers - which still supports the older models (Gemma 3,
+# Qwen2.5-VL, SmolVLM2, InternVL3).
+#
+# On SageMaker / LECT, PyTorch + CUDA are preinstalled. Verify first:
+#   python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
+# If that prints a CUDA-enabled torch, do NOT reinstall torch - install only the rest.
+#
+# Gemma 4 support may not be in a PyPI transformers release yet. If a model fails
+# to load with "no class ...", install transformers from source:
+#   pip install "git+https://github.com/huggingface/transformers.git"
+
+transformers>=4.60          # Gemma 4 + Qwen3-VL; use git+source if a class is missing
+accelerate>=1.0.0
+qwen-vl-utils==0.0.14
+timm
+einops
+sentencepiece
+pillow
+huggingface_hub>=0.26
+hf_transfer                 # much faster downloads for the large (~577 GB) weight set
+pyyaml
+
+# Optional but a big speed/VRAM win on H100 (install AFTER a working torch):
+#   pip install flash-attn --no-build-isolation

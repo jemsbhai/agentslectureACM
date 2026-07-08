@@ -1,0 +1,27 @@
+# Never commit weights, datasets, caches, secrets, or large result blobs.
+models/
+hf-cache/
+assets/
+*.safetensors
+*.bin
+*.pt
+*.gguf
+*.onnx
+
+# Secrets
+.env
+.env.local
+*.key
+*secrets*
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+venv-phi4/
+
+# Smoke / run artifacts (regenerated; real benchmark results live under experiments/)
+smoke_results.json
+*.log
